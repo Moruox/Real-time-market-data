@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0c111b">
+  <meta name="description" content="一个清晰、轻量的全球行情看板。关注A股港股、亚洲市场、美股期货、国债、黄金及债券基金净值；每条行情保留独立报价时间。">
+  <title>市场脉搏 · 全球行情看板</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('market-theme')||'dark'}catch{}</script>
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+<a class="skip" href="#main">跳转到行情</a>
+<header class="header"><div class="header-inner">
+  <a class="brand" href="#" aria-label="市场脉搏首页"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><path d="M6 18h5l3-8 4 14 3-9h5" fill="none" stroke="var(--brand-icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>市场脉搏<small>MARKET PULSE</small></span></a>
+  <nav class="nav" aria-label="主导航"><a class="active" href="#main">市场行情</a><a href="#funds">债基净值</a><a href="#about">数据说明</a></nav>
+  <div class="header-end"><span class="time-zone">北京时间 <b id="clock">--:--:--</b></span><button class="icon-button" id="theme" aria-label="切换亮色主题" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><a class="icon-button repo-link" href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer" aria-label="打开GitHub仓库" title="GitHub 仓库"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4a3.5 3.5 0 0 0-1-2.5c3-.4 6-1.5 6-6A4.7 4.7 0 0 0 18.7 6a4.4 4.4 0 0 0-.1-3s-1.2-.4-3.6 1a12.3 12.3 0 0 0-6 0C6.6 2.6 5.4 3 5.4 3a4.4 4.4 0 0 0-.1 3A4.7 4.7 0 0 0 4 9.5c0 4.5 3 5.6 6 6A3.5 3.5 0 0 0 9 18v4"/></svg></a></div>
+</div></header>
+<div class="shell">
+  <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow"><span class="dot"></span> YOUR DAILY MARKET BRIEF</p><h1 id="page-title">全球行情，<wbr><span class="title-ending">一眼看清<span>。</span></span></h1><p class="subtitle">从亚洲开盘到美股收盘，关注每一次真实的变化。</p></div><div class="intro-actions"><span class="date" id="today"></span><button id="refresh" class="refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>刷新行情</span></button></div></section>
+  <div class="status-line"><span id="status" role="status" aria-live="polite"><span class="dot dim"></span> 正在载入最新报价…</span><label class="auto-label"><input type="checkbox" id="auto" checked><span>自动刷新</span><span id="countdown">30s</span></label></div>
+  <div id="alert" class="alert" role="status" hidden></div>
+  <section class="highlights" id="highlights" aria-label="重点行情"><div class="highlight skeleton"></div><div class="highlight skeleton"></div><div class="highlight skeleton"></div><div class="highlight skeleton"></div></section>
+  <main id="main" tabindex="-1" class="main-grid">
+    <section class="panel markets" aria-labelledby="market-title">
+      <div class="panel-heading"><div><span class="section-kicker">MARKETS</span><h2 id="market-title">市场全览</h2></div><label class="search-box"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="搜索名称 / 代码" aria-label="搜索行情名称或代码"></label></div>
+      <div class="tabs" id="tabs" role="group" aria-label="行情分类"><button class="selected" data-group="all" aria-pressed="true">全部市场</button><button data-group="watch" aria-pressed="false">我的关注 <span id="watch-count"></span></button></div>
+      <div class="table-wrap"><table class="quote-table"><thead><tr><th scope="col" class="star-th"><span class="sr-only">关注</span></th><th scope="col">名称 / 代码</th><th scope="col" class="num">最新价</th><th scope="col" class="num"><button id="sort" aria-label="按涨跌幅排序">涨跌幅 <span id="sort-indicator">↕</span></button></th><th scope="col" class="quote-time">报价时间 <span>北京时间</span></th></tr></thead><tbody id="market-body"><tr><td colspan="5" class="empty">正在连接行情源…</td></tr></tbody></table></div>
+      <div class="table-footer"><span id="table-count">— 个行情</span><span>涨 <i class="legend up"></i> 跌 <i class="legend down"></i> · 点击 ☆ 加入关注</span></div>
+    </section>
+    <aside class="sidebar" aria-label="市场摘要">
+      <section class="panel pulse"><span class="section-kicker">MARKET BREADTH</span><h2>市场温度</h2><p class="muted small">股票指数最新涨跌分布 · 非全市场统计</p><div class="breadth" id="breadth" aria-label="股票指数涨跌分布"></div><div class="breadth-labels" id="breadth-labels"></div><div class="divider"></div><div class="movers" id="movers"><p class="muted">等待行情…</p></div></section>
+      <section class="panel comparison"><span class="section-kicker">CROSS-ASSET</span><h2>跨资产对照</h2><p class="muted small">涨跌幅基准与报价时段各不相同</p><div id="comparison"></div><div class="comparison-legend"><span>下跌</span><span>0</span><span>上涨</span></div></section>
+      <section class="session-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><h3>看报价时间，也看市场时段</h3><p>休市时保留最后报价；美股现货、期货与基金净值分别显示，不把昨夜收盘当作今天行情。</p></div></section>
+    </aside>
+    <section class="funds-section" id="funds" aria-labelledby="fund-title"><div class="section-heading"><div><span class="section-kicker">FUND NAV</span><h2 id="fund-title">三只债基，单独看净值</h2></div><span class="badge">已公布净值 · 非盘中估值</span></div><p class="fund-intro">国债期货只提供利率债参考，不能直接推算基金当天收益。</p><div class="fund-grid" id="fund-grid"></div></section>
+    <section class="panel about" id="about" aria-labelledby="about-title"><div><span class="section-kicker">GOOD TO KNOW</span><h2 id="about-title">把时间和来源说清楚</h2></div><div class="about-grid"><div><h3>30秒尝试刷新</h3><p>页面打开时直接查询公开行情接口。源站可能延迟；接口失败时保留最后有效数据，绝不把查询时间改成报价时间。</p></div><div><h3>静态快照兜底</h3><p>GitHub Actions 每15分钟尝试更新快照及基金净值。任务排队、接口故障和缓存可能延迟更新，请以每行时间为准。</p></div><div><h3>不同资产，不同口径</h3><p>股票通常较前收盘，期货通常较昨结算。主力/当月连续合约可能换月；人民币黄金也受汇率和境内溢价影响。</p></div><div><h3>净值涨幅包含分红</h3><p>基金展示已公布的单位净值与源站当日回报；小图含分红再投。不提供基金盘中收益预测或交易信号。</p></div></div><details><summary>查看数据源与使用说明</summary><p>股票与现货黄金：<a href="https://gu.qq.com/" target="_blank" rel="noopener noreferrer">腾讯财经</a>；亚洲指数与期货：<a href="https://quote.eastmoney.com/center/gridlist.html#global_q" target="_blank" rel="noopener noreferrer">东方财富</a>；备用行情：<a href="https://finance.sina.com.cn/futuremarket/" target="_blank" rel="noopener noreferrer">新浪财经</a>；基金净值：<a href="https://fund.eastmoney.com/" target="_blank" rel="noopener noreferrer">天天基金</a>。均为公开参考数据，可能缺失、延迟或发生修订，不是交易所授权实时行情。网站不收集账户或持仓金额；主题和关注项仅保存在当前浏览器。本页仅供信息参考，不构成投资建议。</p><p id="snapshot-info">快照时间：—</p></details></section>
+  </main>
+  <footer><span class="footer-brand">市场脉搏 <span>/</span> MARKET PULSE</span><span>独立报价 · 清晰来源 · 轻量浏览</span><a href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></footer>
+</div>
+<noscript><p class="noscript">请启用 JavaScript 以加载并刷新行情；数据源链接可在页面下方查看。</p></noscript>
+</body></html>
