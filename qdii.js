@@ -1,6 +1,6 @@
-import {assess,validValuation} from './analysis.js?v=terminal-7';
-import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-7';
-import {chnDate,cnTime} from './quotes.js?v=terminal-7';
+import {assess,validValuation} from './analysis.js?v=terminal-8';
+import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-8';
+import {chnDate,cnTime} from './quotes.js?v=terminal-8';
 export function quotaState(fund,now=Date.now()) {
   const q=fund?.quota;
   if(!q)return {key:'unknown',label:'尚未核实',available:false,limit:'—',note:'缺少渠道数据'};
@@ -39,7 +39,7 @@ export function fundNavInsight(f,now=Date.now()) {
 }
 export function createQDII({get,showDialog,showAnalysis}) {
   const $=s=>document.querySelector(s);
-  const state={data:null,index:'all',category:'all',share:'all',currency:'all',onlyOpen:false,search:'',sort:'available',page:1,size:24,busy:false,lastFetch:0,quotes:{},analysis:{},activeFund:null,range:90,fullHistory:null,fullAdjustedHistory:null,historyPromise:null};
+  const state={data:null,index:'all',category:'all',share:'all',currency:'all',onlyOpen:false,search:'',sort:'available',page:1,size:24,busy:false,lastFetch:0,quotes:{},analysis:{},activeFund:null,range:90,fullHistory:{},fullAdjustedHistory:{},historyLoaded:{},historyPromises:{}};
   if(window.matchMedia('(max-width:600px)').matches)$('#benchmark-fold').open=false;
   function setMarkets(quotes,analysis){state.quotes=quotes;state.analysis=analysis;renderBenchmarks();renderGold();if(state.data)render();}
   function renderBenchmarks(){
@@ -109,16 +109,23 @@ export function createQDII({get,showDialog,showAnalysis}) {
       const data=await get(`./data/qdii.json?t=${Date.now()}`, undefined, 35000);
       if(data.schemaVersion!==1 || !data.funds || !Object.keys(data.funds).length)throw new Error('Invalid QDII data');
       if(!state.data || data.generatedAt>=state.data.generatedAt)state.data=data;
-      state.lastFetch=Date.now();state.fullHistory=null;state.fullAdjustedHistory=null;renderDirections();render();return true;
+      state.lastFetch=Date.now();state.fullHistory={};state.fullAdjustedHistory={};state.historyLoaded={};state.historyPromises={};renderDirections();render();return true;
     }catch{
       if(!state.data)$('#quota-body').innerHTML='<tr><td colspan="11" class="empty">暂时无法读取基金快照。请点击“重新读取快照”重试。</td></tr>';
       $('#quota-coverage').textContent='快照读取失败，保留最后有效数据。请稍后重试。';return false;
     }finally{state.busy=false;$('#quota-reload').disabled=false;$('#quota-reload').textContent='重新读取快照 ↻';}
   }
-  function loadFullHistory(){
-    if(state.fullHistory)return Promise.resolve();
-    if(!state.historyPromise)state.historyPromise=get(`./data/qdii-history.json?t=${Date.now()}`,undefined,60000).then(data=>{state.fullHistory=data.funds||{};state.fullAdjustedHistory=data.adjustedFunds||{};}).finally(()=>{state.historyPromise=null;});
-    return state.historyPromise;
+  function loadFullHistory(code){
+    if(state.historyLoaded[code])return Promise.resolve();
+    if(!state.historyPromises[code]){
+      const generation=state.data.generatedAt;
+      state.historyPromises[code]=get(`./data/fund-history/${code}.json?t=${encodeURIComponent(generation)}`,undefined,20000).then(data=>{
+        if(data.code!==code||!Array.isArray(data.nav)||!Array.isArray(data.adjusted))throw new Error('Invalid fund history');
+        if(generation!==state.data.generatedAt)throw new Error('Snapshot changed');
+        state.fullHistory[code]=data.nav;state.fullAdjustedHistory[code]=data.adjusted;state.historyLoaded[code]=true;
+      }).finally(()=>{if(generation===state.data.generatedAt)delete state.historyPromises[code];});
+    }
+    return state.historyPromises[code];
   }
   function showFund(code,range=90){
     const f=state.data?.funds[code];if(!f)return;
@@ -129,7 +136,7 @@ export function createQDII({get,showDialog,showAnalysis}) {
     const info=fundInsight(f,state.analysis),navInfo=fundNavInsight(f),adj=n?.adjusted;
     let rows=state.fullHistory?.[code]||n?.history || [];
     if(rows.length&&n&&rows.at(-1).date!==n.navDate)rows=n.history;
-    if(!state.fullHistory)loadFullHistory().then(()=>{if(state.activeFund===code&&$('#analysis-dialog').open&&$('#dialog-title').textContent===f.name)showFund(code,state.range);}).catch(()=>{const el=$('#full-history-status');if(el)el.textContent='全年曲线暂未加载，当前显示已缓存区间。';});
+    if(!state.historyLoaded[code])loadFullHistory(code).then(()=>{if(state.activeFund===code&&$('#analysis-dialog').open&&$('#dialog-title').textContent===f.name)showFund(code,state.range);}).catch(()=>{const el=$('#full-history-status');if(el)el.textContent='全年曲线暂未加载，当前显示已缓存区间。';});
     if(rows.length){const cutoff=Date.parse(rows.at(-1).date)-range*86400000;rows=rows.filter(p=>Date.parse(p.date)>=cutoff);}
     let adjustedRows=state.fullAdjustedHistory?.[code]||adj?.history||[];
     const expected=adj?.history?.at(-1),actual=adjustedRows.at(-1);
@@ -143,7 +150,7 @@ export function createQDII({get,showDialog,showAnalysis}) {
     const feeText=fees&&[fees.management,fees.custody,fees.service].every(Number.isFinite)?`${price(fees.management+fees.custody+fees.service,2)}%`:'—';
     const history=(f.quotaHistory || []).slice(-12).reverse();
     const historyHTML=history.length?`<ol class="quota-history">${history.map(p=>`<li><time>${esc(p.at.slice(0,16).replace('T',' '))}</time><span class="history-point"></span><div><strong>${esc(p.status)}</strong><span>${esc(p.limitText || '限额未披露')}${p.state==='paused'?' · 暂停优先，非当前可买额度':''}</span></div></li>`).join('')}</ol>`:'<p class="muted small">尚无已核实的额度记录。</p>';
-    const content=`<p class="dialog-symbol">${f.code} · ${esc(f.indexName)} · ${esc(f.shareClass)} · ${unit}</p><div class="fund-detail-status"><span class="quota-status status-${v.key}">${v.label}</span><span>${q?`渠道查询 ${esc(q.checkedAt.slice(0,16).replace('T',' '))} · 北京时间`:'渠道数据暂缺'}</span></div><div class="metrics-grid">${metric('当前普通申购',esc(v.limit),esc(v.note))}${metric('申购起点',esc(q?.minimumText || '—'),'页面原文金额，不跨币种换算')}${metric('本基金年费率合计',feeText,'管理 / 托管 / 销售服务费，非全部费用')}</div><p class="inline-note">${q?`源站申购状态：${esc(q.status)}；定投状态：${esc(q.dcaStatus)}。`:''}同系列不同份额可能共用额度；请以实际购买渠道的当次下单提示为准。</p><h3 class="dialog-section-title">标的指数买点与估值</h3><div class="signal-summary"><span class="signal signal-${info.signal.key}">${esc(info.signal.label)}</span><div><strong>${esc(info.valuation)}</strong><p>${esc(info.note)}${info.asOf?` · 指数收盘 ${esc(info.asOf)}`:""}。${esc(info.signal.description)} 指数参考不包含本基金汇率、费用、跟踪误差；买点条件与估值独立，不代表低估。</p></div></div>${adjustedSection}<div class="fund-chart-heading"><div><h3>单位净值走势</h3><span>${n?`净值 ${price(n.nav,4)} ${unit} · ${esc(n.navDate)}`:'尚未公布或暂未取得净值'}</span></div><div class="range-switch" role="group" aria-label="净值走势时间范围">${ranges}</div></div><p class="inline-note" id="full-history-status">${state.fullHistory?"":"正在按需加载完整一年曲线；先展示近期缓存。"}</p><div id="fund-unit-chart">${rows.length>=2?historyPlot(rows,'nav',f.name+'单位净值走势',4):'<div class="chart-empty">暂无足够的历史净值，不使用其他份额代替。</div>'}</div><p class="inline-note">单位净值曲线未作分红复权。下列收益率为源站公布口径，日期截至${esc(n?.navDate || '—')}，不从未复权净值曲线直接推算。</p><div class="performance-grid">${[['近1月','1m'],['近3月','3m'],['近6月','6m'],['近1年','1y']].map(([label,key])=>`<div><span>${label}</span><strong class="${tone(perf[key])}">${signed(perf[key])}</strong></div>`).join('')}</div><details class="rules-details"><summary>查看额度变更与日度记录（${f.quotaHistory?.length || 0}条）</summary><p class="inline-note">自本页上线起，按实际观测记录变更；未变更时每天留一条。首次观测不代表当天才生效，也不补造历史额度。</p>${historyHTML}</details><div class="analysis-sources">${info.source?`<a href="${esc(info.source)}" target="_blank" rel="noopener noreferrer">标的指数估值来源 ↗</a>`:""}${q?`<a href="${esc(q.url)}" target="_blank" rel="noopener noreferrer">限额来源：${esc(q.source)} ↗</a>`:''}<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">基金详情与公告 ↗</a>${n?`<a href="https://fundf10.eastmoney.com/jjjz_${f.code}.html" target="_blank" rel="noopener noreferrer">已公布净值：天天基金 · ${esc(n.navDate)} ↗</a>`:''}</div>`;
+    const content=`<p class="dialog-symbol">${f.code} · ${esc(f.indexName)} · ${esc(f.shareClass)} · ${unit}</p><div class="fund-detail-status"><span class="quota-status status-${v.key}">${v.label}</span><span>${q?`渠道查询 ${esc(q.checkedAt.slice(0,16).replace('T',' '))} · 北京时间`:'渠道数据暂缺'}</span></div><div class="metrics-grid">${metric('当前普通申购',esc(v.limit),esc(v.note))}${metric('申购起点',esc(q?.minimumText || '—'),'页面原文金额，不跨币种换算')}${metric('本基金年费率合计',feeText,'管理 / 托管 / 销售服务费，非全部费用')}</div><p class="inline-note">${q?`源站申购状态：${esc(q.status)}；定投状态：${esc(q.dcaStatus)}。`:''}同系列不同份额可能共用额度；请以实际购买渠道的当次下单提示为准。</p><h3 class="dialog-section-title">标的指数买点与估值</h3><div class="signal-summary"><span class="signal signal-${info.signal.key}">${esc(info.signal.label)}</span><div><strong>${esc(info.valuation)}</strong><p>${esc(info.note)}${info.asOf?` · 指数收盘 ${esc(info.asOf)}`:""}。${esc(info.signal.description)} 指数参考不包含本基金汇率、费用、跟踪误差；买点条件与估值独立，不代表低估。</p></div></div>${adjustedSection}<div class="fund-chart-heading"><div><h3>单位净值走势</h3><span>${n?`净值 ${price(n.nav,4)} ${unit} · ${esc(n.navDate)}`:'尚未公布或暂未取得净值'}</span></div><div class="range-switch" role="group" aria-label="净值走势时间范围">${ranges}</div></div><p class="inline-note" id="full-history-status">${state.historyLoaded[code]?"":"正在加载本基金完整一年曲线；先展示近期缓存。"}</p><div id="fund-unit-chart">${rows.length>=2?historyPlot(rows,'nav',f.name+'单位净值走势',4):'<div class="chart-empty">暂无足够的历史净值，不使用其他份额代替。</div>'}</div><p class="inline-note">单位净值曲线未作分红复权。下列收益率为源站公布口径，日期截至${esc(n?.navDate || '—')}，不从未复权净值曲线直接推算。</p><div class="performance-grid">${[['近1月','1m'],['近3月','3m'],['近6月','6m'],['近1年','1y']].map(([label,key])=>`<div><span>${label}</span><strong class="${tone(perf[key])}">${signed(perf[key])}</strong></div>`).join('')}</div><details class="rules-details"><summary>查看额度变更与日度记录（${f.quotaHistory?.length || 0}条）</summary><p class="inline-note">自本页上线起，按实际观测记录变更；未变更时每天留一条。首次观测不代表当天才生效，也不补造历史额度。</p>${historyHTML}</details><div class="analysis-sources">${info.source?`<a href="${esc(info.source)}" target="_blank" rel="noopener noreferrer">标的指数估值来源 ↗</a>`:""}${q?`<a href="${esc(q.url)}" target="_blank" rel="noopener noreferrer">限额来源：${esc(q.source)} ↗</a>`:''}<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">基金详情与公告 ↗</a>${n?`<a href="https://fundf10.eastmoney.com/jjjz_${f.code}.html" target="_blank" rel="noopener noreferrer">已公布净值：天天基金 · ${esc(n.navDate)} ↗</a>`:''}</div>`;
     if($('#analysis-dialog').open){$('#dialog-title').textContent=f.name;$('#dialog-content').innerHTML=content;}else showDialog(f.name,'OTC QDII / QUOTA & NAV',content);
     if(rows.length>=2)bindHistoryPlot($('#fund-unit-chart'),rows);
     if(adjustedRows.length>=2)bindHistoryPlot($('#fund-adjusted-chart'),adjustedRows);

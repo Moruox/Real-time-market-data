@@ -5,3 +5,5 @@ node_modules/
 .playwright*/
 output/
 .env*
+
+/data/fund-history/

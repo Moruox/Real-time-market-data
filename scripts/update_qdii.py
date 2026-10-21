@@ -337,6 +337,12 @@ def main():
     result=dict(schemaVersion=1,generatedAt=now.isoformat(timespec='seconds'),catalogCheckedAt=catalog_at,
         catalogSource=CATALOG_URL,channel='天天基金公开渠道',funds=funds,excluded=excluded,issues=issues)
     history_path.write_text(json.dumps(dict(generatedAt=result['generatedAt'],funds={code:full_history[code] for code in funds if code in full_history},adjustedFunds={code:adjusted_history[code] for code in funds if code in adjusted_history}),ensure_ascii=False,separators=(',',':'))+'\n')
+    # Small per-share payloads keep opening a fund independent of universe size.
+    shards=ROOT/'data/fund-history'
+    shards.mkdir(exist_ok=True)
+    for code in funds:
+        payload=dict(code=code,generatedAt=result['generatedAt'],nav=full_history.get(code,[]),adjusted=adjusted_history.get(code,[]))
+        (shards/(code+'.json')).write_text(json.dumps(payload,ensure_ascii=False,separators=(',',':'))+'\n')
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'))+'\n');temp.replace(path)
     print(json.dumps({'shares':len(funds),'indexShares':sum(f['category']=='index' for f in funds.values()),
         'quotaVerified':sum(bool(f.get('quota',{}).get('verified')) for f in funds.values()),

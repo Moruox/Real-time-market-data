@@ -37,6 +37,7 @@ jobs:
           mkdir -p _site/data
           cp index.html styles.css app.js quotes.js analysis.js ui.js qdii.js favicon.svg config.json .nojekyll _site/
           cp data/quotes.json data/qdii.json data/qdii-history.json _site/data/
+          cp -r data/fund-history _site/data/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
