@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {quotaState,filterFunds} from '../qdii.js';
+import {quotaState,filterFunds,fundInsight} from '../qdii.js';
 const now=Date.parse('2026-10-21T04:10:00Z');
 const fund={code:'000001',name:'测试纳斯达克100ETF联接A',family:'测试',index:'ndx',currency:'CNY',shareClass:'A',quota:{verified:true,checkedAt:'2026-10-21T12:00:00+08:00',state:'limited',dailyLimit:10,limitText:'10.00元',limitUnit:'元',minimum:1}};
 test('A retained numeric quota does not override a suspended purchase state',()=>{
@@ -20,4 +20,13 @@ test('Currency, share class, benchmark variants and availability filters are ind
  assert.equal(filterFunds([fund,usd,equal],{index:'sp500'},now).length,0);
  assert.deepEqual(filterFunds([fund,usd,equal],{currency:'USD',share:'C'},now).map(f=>f.code),['000002']);
  assert.equal(filterFunds([fund,usd,equal],{index:'ndx',onlyOpen:true},now).length,2);
+});
+
+test('Active, bond and strategy funds do not inherit broad-index valuations or signals',()=>{
+ const a={ndx:{valuation:{pe:25,date:'2026-10-20'}}};
+ assert.equal(fundInsight({category:'active'},a,now).signal.label,'暂不判断');
+ assert.equal(fundInsight({category:'bond'},a,now).valuation,'PE / PB不适用');
+ assert.equal(fundInsight({category:'index',index:'sp500ew'},a,now).valuation,'估值暂缺');
+ assert.match(fundInsight({category:'index',benchmark:'ndx'},a,now).valuation,/25/);
+ assert.equal(filterFunds([{...fund,category:'index'},{...fund,category:'active'}],{category:'index'},now).length,1);
 });

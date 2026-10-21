@@ -1,4 +1,4 @@
-"""Discover mainland OTC Nasdaq-100 / S&P 500 shares; preserve source-specific quotas."""
+"""Discover mainland OTC QDII shares; preserve source-specific quotas."""
 import concurrent.futures
 import datetime as dt
 import html
@@ -14,7 +14,79 @@ CN = ZoneInfo('Asia/Shanghai')
 CATALOG_URL = 'https://fund.eastmoney.com/js/fundcode_search.js'
 TRADE_URL = 'https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=8&page=1,50000&js=reData&sort=fcode,asc'
 PUBLIC_URL = 'https://moruox.github.io/Real-time-market-data/data/qdii.json'
-INDEX_NAMES = {'ndx':'纳斯达克100', 'sp500':'标普500', 'sp500ew':'标普500等权'}
+# Ordered specific index identities; never map a sector/strategy to a broad index.
+INDEX_RULES = [
+ ('sp500ew','标普500等权',r'标普(?:美国)?500.*等权',None),
+ ('ndx','纳斯达克100',r'纳斯达克100|纳指100','ndx'),
+ ('sp500','标普500',r'标普(?:美国)?500','sp500'),
+ ('nbi','纳斯达克生物科技',r'纳斯达克生物|广发生物科技指数','nbi'),
+ ('ftse','英国富时100',r'富时100','ftse'),
+ ('sp100ew','标普100等权',r'标普100.*等权',None),
+ ('overseasInternet50','中证海外互联网50',r'海外互联网50',None),
+ ('chinaUsInternet','中证中美互联网',r'中美互联网',None),
+ ('nasdaqTech','纳斯达克科技',r'纳斯达克科技',None),
+ ('spIT','标普信息科技',r'标普信息科技',None),
+ ('hkConsumer','恒生消费',r'恒生消费',None),
+ ('spConsumer','标普消费',r'标普(?:美国)?消费',None),
+ ('hkInnovative','港股创新药',r'港股创新药',None),
+ ('hkHealth','恒生医疗保健',r'恒生医疗保健',None),
+ ('spHealth','标普医疗保健',r'标普医疗保健',None),
+ ('cnkrChip','中韩半导体',r'中韩半导体',None),
+ ('seaTech','东南亚科技',r'东南亚科技',None),
+ ('hkState','中证香港内地国有企业',r'香港内地国有企业',None),
+ ('hkSmall','香港小型股',r'香港小型股',None),
+ ('asiaSelect','亚太精选指数',r'亚太精选',None),
+ ('djOil','道琼斯石油',r'道琼斯石油',None),
+ ('spGlobalOil','标普全球石油',r'标普全球石油',None),
+ ('spOilGas','标普油气行业',r'标普(?:油气|石油天然气)',None),
+ ('usRealEstate','美国房地产指数',r'美国房地产',None),
+ ('ftseReit','富时发达市场REITs',r'富时发达市场REIT',None),
+ ('usReit','美国精选REIT',r'美国精选REIT',None),
+ ('hstech','恒生科技',r'恒生科技','hstech'),
+ ('hscei','恒生国企',r'恒生(?:中国企业|国企)','hscei'),
+ ('hsi','恒生指数',r'恒生(?:指数|ETF|交易型)','hsi'),
+ ('hkbank','中证香港银行',r'中证香港银行','hkbank'),
+ ('nikkei','日经225',r'日经225','nikkei'),
+ ('topix','日本东证',r'日本东证',None),
+ ('dax','德国DAX',r'DAX|德国30','dax'),
+ ('france','法国CAC40',r'CAC40','cac'),
+ ('stoxx','欧洲指数',r'欧洲|欧元区',None),
+ ('india','印度指数',r'印度',None),
+ ('vietnam','越南指数',r'越南',None),
+ ('hkInternet','恒生互联网',r'恒生互联网',None),
+ ('chinaInternet','中国互联网',r'中国互联网|中国互联',None),
+ ('hkTech','香港科技',r'香港科技',None),
+ ('health','海外医疗指数',r'医疗|医药|生物',None),
+ ('tech','海外科技指数',r'科技|芯片|半导体|信息技术',None),
+ ('dividend','海外红利指数',r'红利|股息|高分红',None),
+ ('reitIndex','REITs / 地产指数',r'REIT|房地产|地产',None),
+ ('energyIndex','能源股票指数',r'石油|油气|能源',None),
+ ('consumer','海外消费指数',r'消费',None),
+ ('globalIndex','全球 / 其他海外指数',r'.*',None),
+]
+
+
+def classify(name, kind):
+    passive = '指数' in kind or '指数' in name or ('ETF' in name.upper() and '联接' in name)
+    # Some index trackers are registered as QDII-FOF.
+    passive = passive or bool(re.search(r'纳斯达克100|纳指100|标普(?:美国)?500',name))
+    if '商品' in kind or '纯债' in kind or '混合债' in kind:passive=False
+    if passive:
+        for key,label,pattern,benchmark in INDEX_RULES:
+            if re.search(pattern,name,re.I):
+                # Only exact index families get the market dashboard's signal.
+                if re.search(r'增强|反向|杠杆|两倍|三倍|低波|质量|成长|等权',name):benchmark=None
+                return key,label,benchmark,'index','指数基金'
+    if '纯债' in kind or '混合债' in kind:return 'bond','海外债券',None,'bond','债券基金'
+    if '商品' in kind:
+        key='gold' if re.search('黄金|贵金属',name) else 'oil' if re.search('原油|石油|油气',name) else 'commodity'
+        return key,{'gold':'黄金 / 贵金属','oil':'原油 / 商品','commodity':'其他商品'}[key],None,'commodity','商品基金'
+    if 'REIT' in kind:return 'reit','主动REITs / 地产',None,'reit','REITs基金'
+    if 'FOF' in kind:return 'fof','全球配置FOF',None,'allocation','多资产 / FOF'
+    if '股票' in kind or '混合偏股' in kind:
+        key='activeTech' if re.search('科技|数字|芯片|互联网|人工智能',name) else 'activeAsia' if re.search('亚洲|亚太|港股|中国|中华',name) else 'activeGlobal'
+        return key,{'activeTech':'主动科技 / 主题','activeAsia':'主动亚洲 / 大中华','activeGlobal':'主动全球股票'}[key],None,'active','主动权益'
+    return 'allocation','主动多资产配置',None,'allocation','多资产 / FOF'
 
 
 def request(url):
@@ -42,15 +114,12 @@ def catalog(text):
             continue
         code, name, kind = row[0], row[2], row[3]
         compact = re.sub(r'\s+', '', name)
-        if not re.search(r'纳斯达克100|纳指100|标普(?:美国)?500', compact):
+        if 'QDII' not in kind and '海外' not in kind:
             continue
-        if ('ETF' in name.upper() and '联接' not in name) or ('指数' not in kind and kind != 'QDII-FOF'):
-            excluded.append({'code':code,'name':name,'reason':'非场外指数或联接份额'})
+        if 'ETF' in name.upper() and '联接' not in name:
+            excluded.append({'code':code,'name':name,'reason':'纯场内ETF，不属于场外份额'})
             continue
-        if re.search(r'增强|反向|杠杆|两倍|三倍|低波|质量|成长', compact):
-            excluded.append({'code':code,'name':name,'reason':'不同策略或风格指数'})
-            continue
-        index = 'ndx' if re.search('纳斯达克100|纳指100', compact) else 'sp500ew' if '等权' in compact else 'sp500'
+        index,label,benchmark,category,category_name=classify(compact,kind)
         currency = 'USD' if re.search('美元|美汇|美钞', name) else 'CNY'
         base = re.sub(r'\([^)]*\)|（[^）]*）', '', name)
         m = re.search(r'([ACDEFI])(?=人民币|美元|$)', base)
@@ -58,7 +127,7 @@ def catalog(text):
         family = re.sub(r'美元现汇|美元现钞|美元汇|人民币|美元|现汇|现钞|美汇|美钞', '', base)
         family = family.replace('纳指100', '纳斯达克100')
         family = re.sub(r'[ACDEFI]$', '', family)
-        funds[code] = dict(code=code,name=name,index=index,indexName=INDEX_NAMES[index],currency=currency,
+        funds[code] = dict(code=code,name=name,index=index,indexName=label,benchmark=benchmark,category=category,categoryName=category_name,currency=currency,
             shareClass=share,family=family,type=kind,url=f'https://fund.eastmoney.com/{code}.html')
     if not funds:
         raise ValueError('No matching OTC shares')
@@ -183,6 +252,13 @@ def main():
     path=ROOT/'data/qdii.json'
     old=json.loads(path.read_text()) if path.exists() else {}
     issues=[]
+    history_path=ROOT/'data/qdii-history.json'
+    full_history=json.loads(history_path.read_text()).get('funds',{}) if history_path.exists() else {}
+    try:
+        remote_history=json.loads(request(PUBLIC_URL.replace('qdii.json','qdii-history.json')))
+        for code,points in remote_history.get('funds',{}).items():
+            if points and (not full_history.get(code) or points[-1]['date']>=full_history[code][-1]['date']):full_history[code]=points
+    except Exception:pass
     try:
         deployed=json.loads(request(PUBLIC_URL))
         if deployed.get('schemaVersion')==1:
@@ -212,10 +288,11 @@ def main():
             jobs[(code,'quota')]=lambda f=fund:quota_page(request(f"https://fundf10.eastmoney.com/jjfl_{f['code']}.html"),f,now)
         if not recent(fund.get('navData',{}),'fetchedAt',now,6):
             jobs[(code,'navData')]=lambda c=code:nav_series(request(f'https://fund.eastmoney.com/pingzhongdata/{c}.js'),c,now)
-    executor=concurrent.futures.ThreadPoolExecutor(max_workers=5)
-    futures={executor.submit(fn):key for key,fn in jobs.items()}
+    executor=concurrent.futures.ThreadPoolExecutor(max_workers=4)
+    ordered=sorted(jobs.items(),key=lambda item:(item[0][1]!='quota',funds[item[0][0]].get(item[0][1],{}).get('checkedAt' if item[0][1]=='quota' else 'fetchedAt','')))
+    futures={executor.submit(fn):key for key,fn in ordered}
     try:
-        for future in concurrent.futures.as_completed(futures,timeout=180):
+        for future in concurrent.futures.as_completed(futures,timeout=300):
             code,field=futures[future]
             try:
                 incoming=future.result()
@@ -234,12 +311,17 @@ def main():
         executor.shutdown(wait=False,cancel_futures=True)
     for fund in funds.values():
         if fund.get('navData'):
-            fund['navData']['history']=[dict(date=p['date'],nav=p['nav']) for p in fund['navData']['history']]
+            n=fund['navData']
+            merged={p['date']:dict(date=p['date'],nav=p['nav']) for p in full_history.get(fund['code'],[])}
+            merged.update({p['date']:dict(date=p['date'],nav=p['nav']) for p in n['history']})
+            full_history[fund['code']]=[merged[d] for d in sorted(merged) if d<=n['navDate']][-252:]
+            n['history']=full_history[fund['code']][-60:]
         fund['quotaHistory']=history_update(fund.get('quotaHistory'),fund.get('quota'))
     result=dict(schemaVersion=1,generatedAt=now.isoformat(timespec='seconds'),catalogCheckedAt=catalog_at,
         catalogSource=CATALOG_URL,channel='天天基金公开渠道',funds=funds,excluded=excluded,issues=issues)
+    history_path.write_text(json.dumps(dict(generatedAt=result['generatedAt'],funds={code:full_history[code] for code in funds if code in full_history}),ensure_ascii=False,separators=(',',':'))+'\n')
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'))+'\n');temp.replace(path)
-    print(json.dumps({'shares':len(funds),'standard':sum(f['index']!='sp500ew' for f in funds.values()),
+    print(json.dumps({'shares':len(funds),'indexShares':sum(f['category']=='index' for f in funds.values()),
         'quotaVerified':sum(bool(f.get('quota',{}).get('verified')) for f in funds.values()),
         'navSeries':sum(bool(f.get('navData')) for f in funds.values()),'issues':issues},ensure_ascii=False))
 

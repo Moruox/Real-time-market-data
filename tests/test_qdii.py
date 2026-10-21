@@ -10,12 +10,23 @@ class QDIITests(unittest.TestCase):
     def test_catalog_distinguishes_otc_etf_and_equal_weight(self):
         rows=[['000001','x','测试纳斯达克100ETF联接(QDII)A','指数型-海外股票'],['000002','x','测试纳斯达克100ETF','指数型-海外股票'],['000003','x','测试标普500指数美元汇A','指数型-海外股票'],['000004','x','测试标普500等权重指数C人民币','指数型-海外股票'],['000005','x','测试纳斯达克生物科技指数A','指数型-海外股票']]
         funds,excluded=catalog('var r = '+json.dumps(rows)+';')
-        self.assertEqual(set(funds),{'000001','000003','000004'})
+        self.assertEqual(set(funds),{'000001','000003','000004','000005'})
         self.assertEqual(funds['000004']['index'],'sp500ew')
         self.assertEqual(funds['000003']['currency'],'USD')
         self.assertEqual(funds['000003']['shareClass'],'A')
         self.assertEqual(funds['000003']['family'],'测试标普500指数')
         self.assertEqual(len(excluded),1)
+
+    def test_all_types_and_precise_benchmark_mapping(self):
+        rows=[['000010','x','测试全球科技股票A','QDII-普通股票'],['000011','x','测试全球美元债A','QDII-纯债'],['000012','x','测试原油指数A','QDII-商品'],['000013','x','测试恒生科技ETF联接A','指数型-海外股票'],['000014','x','测试标普500低波指数A','指数型-海外股票'],['000015','x','测试沪深300A','指数型-股票']]
+        funds,_=catalog('var r='+json.dumps(rows)+';')
+        self.assertNotIn('000015',funds)
+        self.assertEqual(funds['000010']['category'],'active')
+        self.assertIsNone(funds['000010']['benchmark'])
+        self.assertEqual(funds['000011']['category'],'bond')
+        self.assertEqual(funds['000012']['category'],'commodity')
+        self.assertEqual(funds['000013']['benchmark'],'hstech')
+        self.assertIsNone(funds['000014']['benchmark'])
 
     def page(self,status='暂停申购',limit='10.00元'):
         return '<title>270042</title><table><tr><td>申购状态</td><td>'+status+'</td></tr><tr><td>日累计申购限额</td><td>'+limit+'</td></tr><tr><td>定投状态</td><td>不支持</td></tr><tr><td>管理费率</td><td>0.80%（每年）</td></tr></table>'
@@ -65,7 +76,8 @@ class QDIITests(unittest.TestCase):
         for code,fund in data['funds'].items():
             self.assertEqual(code,fund['code'])
             self.assertIn(fund['currency'],['CNY','USD'])
-            self.assertIn(fund['index'],['ndx','sp500','sp500ew'])
+            self.assertTrue(fund['index'])
+            self.assertIn(fund['category'],['index','active','bond','commodity','reit','allocation'])
             self.assertTrue('ETF' not in fund['name'] or '联接' in fund['name'])
             if fund.get('navData'):
                 self.assertGreater(fund['navData']['nav'],0)

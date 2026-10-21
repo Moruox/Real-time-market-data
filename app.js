@@ -1,7 +1,7 @@
-import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-4';
-import { createQDII } from './qdii.js?v=terminal-4';
-import { assess, validValuation, RULES } from './analysis.js?v=terminal-4';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-4';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-5';
+import { createQDII } from './qdii.js?v=terminal-5';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-5';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-5';
 const $ = s => document.querySelector(s);
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
 const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
@@ -99,7 +99,7 @@ function setPage(page, updateHash=false) {
   $('.skip').setAttribute('href',isQDII?'#quota-title':'#main');
   for(const b of document.querySelectorAll('[data-page]')){const active=b.dataset.page===state.page;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;}
   $('#page-title').innerHTML=isQDII?'场外QDII<span>限额雷达</span>':'全球市场<span>终端</span>';
-  $('#page-subtitle').textContent=isQDII?'纳斯达克100与标普500，逐份额查看渠道限额和净值走势。':'行情 · 估值 · 买入参考，在一张表里看清。';
+  $('#page-subtitle').textContent=isQDII?'按指数与投资方向筛选场外QDII，查看限额、走势、标的估值与买点参考。':'行情 · 估值 · 买入参考，在一张表里看清。';
   if(updateHash && location.hash!==(isQDII?'#qdii':'#market'))history.pushState(null,'',isQDII?'#qdii':'#market');
   if(isQDII)qdii.refresh();
 }
