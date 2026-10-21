@@ -16,13 +16,6 @@ class DataTests(unittest.TestCase):
         q = m.sina(text, [{'id': 't', 'sina': 'nf_T0', 'group': 'bonds'}], '2026-10-20T14:00:01+08:00')['t']
         self.assertAlmostEqual(q['changePct'], 1.)
 
-    def test_ex_dividend_return_is_not_false_loss(self):
-        text = 'var Data_netWorthTrend = [{"x":1704067200000,"y":1.25,"equityReturn":0},{"x":1704153600000,"y":1.24,"equityReturn":0}];var Data_ACWorthTrend = [[1704067200000,1.25],[1704153600000,1.25]];'
-        q = m.fund_data(text, 'test', '2024-01-03T12:00:00+08:00')
-        self.assertAlmostEqual(q['history'][-1]['value'], 1.)
-        self.assertEqual(q['nav'], 1.24)
-        self.assertEqual(q['changePct'], 0)
-
     def test_missing_eastmoney_quote_not_zero(self):
         q = m.eastmoney({'data': {'diff': [{'f12': 'TM', 'f13': 220, 'f2': '-', 'f3': '-', 'f124': 1}]}}, [{'id':'t', 'eastmoney':'220.TM', 'group':'bonds'}], 'now')
         self.assertEqual(q, {})
@@ -35,11 +28,17 @@ class DataTests(unittest.TestCase):
             q = data['quotes'][item['id']]
             self.assertTrue(m.valid(q['price'], q['changePct']))
             self.assertIn('quoteAt', q)
-        for item in config['funds']:
-            f = data['funds'][item['id']]
-            self.assertGreater(f['nav'], 0)
-            self.assertEqual(len(f['history']), 60)
-            self.assertEqual(f['history'][-1]['date'], f['navDate'])
+        self.assertNotIn('funds', data)
+        self.assertEqual(len(config['instruments']), 45)
+        for item in config['instruments']:
+            if not item.get('analyze'):
+                continue
+            t = data['analysis'][item['id']]['technical']
+            self.assertEqual(t['sampleSize'], 252)
+            self.assertEqual(t['asOf'], t['history'][-1]['date'])
+            self.assertGreater(t['ma200'], 0)
+            self.assertLessEqual(t['drawdownPct'], 0)
+            self.assertTrue(0 <= t['rsi14'] <= 100)
 
 if __name__ == '__main__':
     unittest.main()

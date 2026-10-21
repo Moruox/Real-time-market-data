@@ -6,7 +6,10 @@ import math
 import pathlib
 import re
 import subprocess
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from zoneinfo import ZoneInfo
+from scripts.analytics_data import update_analysis
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CN = ZoneInfo('Asia/Shanghai')
@@ -109,38 +112,24 @@ def sina(text, items, fetched):
     return quotes
 
 
-def fund_data(text, code, fetched):
-    m = re.search(r'var Data_netWorthTrend\s*=\s*(\[.*?\]);', text)
-    am = re.search(r'var Data_ACWorthTrend\s*=\s*(\[.*?\]);', text)
-    if not m or not am:
-        raise ValueError('Fund NAV series missing')
-    rows = json.loads(m.group(1))
-    accumulated = dict(json.loads(am.group(1)))
-    if len(rows) < 2:
-        raise ValueError('Fund NAV series too short')
-    history, total, prev = [], 1., None
-    for v in rows:
-        nav = float(v['y'])
-        if prev:
-            dividend = round((float(accumulated.get(v['x']) or nav) - nav) -
-                (float(accumulated.get(prev['x']) or prev['y']) - float(prev['y'])), 7)
-            if dividend < -0.00001:
-                raise ValueError('Fund split requires explicit handling')
-            total *= (nav + max(0, dividend)) / float(prev['y'])
-        history.append({'date': dt.datetime.fromtimestamp(v['x'] / 1000, CN).date().isoformat(), 'value': total})
-        prev = v
-    latest = rows[-1]
-    if not valid(latest['y'], latest['equityReturn']):
-        raise ValueError('Invalid fund NAV')
-    return dict(id=code, nav=float(latest['y']), changePct=float(latest['equityReturn']),
-                navDate=history[-1]['date'], fetchedAt=fetched, source='天天基金', history=history[-60:])
-
-
 def main():
     config = json.loads((ROOT / 'config.json').read_text())
     path = ROOT / 'data/quotes.json'
     old = json.loads(path.read_text()) if path.exists() else {}
-    quotes, funds = dict(old.get('quotes', {})), dict(old.get('funds', {}))
+    # Deployed snapshot supplies the last good analytics between scheduled runs.
+    try:
+        deployed = json.loads(request('https://moruox.github.io/Real-time-market-data/data/quotes.json'))
+        if deployed.get('schemaVersion') == 1:
+            for key, value in deployed.get('analysis', {}).items():
+                current = old.setdefault('analysis', {}).setdefault(key, {})
+                for field, incoming in value.items():
+                    date_key = 'asOf' if field == 'technical' else 'date'
+                    if incoming.get(date_key, '') >= current.get(field, {}).get(date_key, ''):
+                        current[field] = incoming
+    except Exception:
+        pass
+    ids = {i['id'] for i in config['instruments']}
+    quotes = {k: v for k, v in old.get('quotes', {}).items() if k in ids}
     fetched = dt.datetime.now(CN).isoformat(timespec='seconds')
     issues, successes = [], 0
     items = config['instruments']
@@ -150,25 +139,16 @@ def main():
         '腾讯财经': lambda: tencent(request('https://qt.gtimg.cn/q=' + tc, 'gb18030'), items, fetched),
         '东方财富': lambda: eastmoney(json.loads(request('https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f12,f13,f14,f124&secids=' + em)), items, fetched)
     }
-    for fund in config['funds']:
-        code = fund['id']
-        jobs['fund:' + code] = lambda c=code: fund_data(request('https://fund.eastmoney.com/pingzhongdata/' + c + '.js', referer='https://fund.eastmoney.com/'), c, fetched)
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         running = {executor.submit(fn): name for name, fn in jobs.items()}
         for future in concurrent.futures.as_completed(running):
             name = running[future]
             try:
                 result = future.result()
-                if name.startswith('fund:'):
-                    code = name.split(':')[1]
-                    if result['navDate'] >= funds.get(code, {}).get('navDate', ''):
-                        funds[code] = result
-                    successes += 1
-                else:
-                    for key, q in result.items():
-                        if key not in quotes or dt.datetime.fromisoformat(q['quoteAt']) >= dt.datetime.fromisoformat(quotes[key]['quoteAt']):
-                            quotes[key] = q
-                    successes += bool(result)
+                for key, q in result.items():
+                    if key not in quotes or dt.datetime.fromisoformat(q['quoteAt']) >= dt.datetime.fromisoformat(quotes[key]['quoteAt']):
+                        quotes[key] = q
+                successes += bool(result)
             except Exception as exc:
                 issues.append(name + ': ' + type(exc).__name__)
     missing = [i for i in items if i['id'] not in quotes or quotes[i['id']].get('fetchedAt') != fetched]
@@ -184,12 +164,13 @@ def main():
             issues.append('新浪备用: ' + type(exc).__name__)
     if not successes:
         raise RuntimeError('All data sources failed; leaving existing snapshot untouched')
-    result = dict(schemaVersion=1, generatedAt=fetched, quotes=quotes, funds=funds, issues=issues)
+    analysis, analysis_issues = update_analysis(items, old.get('analysis', {}), dt.datetime.now(CN))
+    result = dict(schemaVersion=1, generatedAt=fetched, quotes=quotes, analysis=analysis, issues=issues, analysisIssues=analysis_issues)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix('.tmp')
     temp.write_text(json.dumps(result, ensure_ascii=False, separators=(',', ':')) + '\n')
     temp.replace(path)
-    print(json.dumps({'generatedAt': fetched, 'quotes': len(quotes), 'funds': len(funds), 'issues': issues}, ensure_ascii=False))
+    print(json.dumps({'generatedAt': fetched, 'quotes': len(quotes), 'indices': len(analysis), 'valuation': sum(bool(v.get('valuation')) for v in analysis.values()), 'issues': issues, 'analysisIssues': analysis_issues}, ensure_ascii=False))
 
 
 if __name__ == '__main__':

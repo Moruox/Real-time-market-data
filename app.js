@@ -1,3 +1,4 @@
+import { assess, validValuation, RULES } from './analysis.js';
 import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js';
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -5,7 +6,7 @@ const signed = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)
 const tone = v => v > 0 ? 'up' : v < 0 ? 'down' : 'neutral';
 const price = (v, digits = 2) => Number(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
-const state = { config: null, quotes: {}, funds: {}, snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null };
+const state = { config: null, quotes: {}, analysis: {}, view: 'quotes', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null };
 let watch;
 try { const raw = localStorage.getItem('market-watch'); watch = raw ? new Set(JSON.parse(raw)) : new Set(['nq', 'kospi', 'tl', 'xau']); } catch { watch = new Set(['nq', 'kospi', 'tl', 'xau']); }
 let auto = true;
@@ -36,6 +37,7 @@ function row(item) {
   const q = state.quotes[item.id];
   const star = `<td class="star-cell"><button class="star" data-watch="${item.id}" aria-label="${watch.has(item.id) ? '取消关注' : '关注'}${item.name}" aria-pressed="${watch.has(item.id)}">${watch.has(item.id) ? '★' : '☆'}</button></td>`;
   const name = `<td class="name-cell"><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.name}</a><span class="symbol">${item.symbol}</span></td>`;
+  if (state.view === 'analysis') return analysisRow(item, star, name);
   if (!q) return `<tr class="market-row">${star}${name}<td class="num price">—</td><td class="num"><span class="muted">—</span></td><td class="quote-time"><span class="source warning">暂无有效报价</span></td></tr>`;
   const label = quoteLabel(item, q);
   const stamp = `${chnDate(q.quoteAt).slice(5)} ${cnTime(q.quoteAt)}`;
@@ -43,9 +45,9 @@ function row(item) {
 }
 function renderMarkets() {
   const { instruments, groups } = state.config;
-  let filtered = instruments.filter(i => (state.active === 'all' || (state.active === 'watch' ? watch.has(i.id) : i.group === state.active)) && `${i.name} ${i.symbol} ${i.id}`.toLowerCase().includes(state.search));
+  let filtered = instruments.filter(i => (state.view !== 'analysis' || i.analyze) && (state.active === 'all' || (state.active === 'watch' ? watch.has(i.id) : i.group === state.active)) && `${i.name} ${i.symbol} ${i.id}`.toLowerCase().includes(state.search));
   let html = '';
-  if (state.sort) {
+  if (state.sort && state.view === 'quotes') {
     filtered = [...filtered].sort((a, b) => {
       const av = state.quotes[a.id]?.changePct, bv = state.quotes[b.id]?.changePct;
       if (av == null) return 1; if (bv == null) return -1; return state.sort * (av - bv);
@@ -60,19 +62,22 @@ function renderMarkets() {
     }
   }
   $('#market-body').innerHTML = html || '<tr><td colspan="5" class="empty">没有匹配的行情。试试其他名称，或点击 ☆ 添加关注。</td></tr>';
-  $('#table-count').textContent = `${filtered.length} 个行情`;
+  $('#table-count').textContent = `${filtered.length} 个${state.view === 'analysis' ? '指数' : '行情'}`;
+  const analyzable = instruments.filter(i => i.analyze);
+  const covered = analyzable.filter(i => validValuation(state.analysis[i.id]?.valuation));
+  $('#analysis-count').textContent = `${analyzable.length}个指数 · ${covered.length}个有官方PE`;
   $('#watch-count').textContent = watch.size;
   $('#sort-indicator').textContent = state.sort === 1 ? '↑' : state.sort === -1 ? '↓' : '↕';
   $('#sort').setAttribute('aria-label', `按涨跌幅排序，当前${state.sort === 1 ? '升序' : state.sort === -1 ? '降序' : '默认顺序'}`);
 }
 function renderSidebar() {
-  const stocks = state.config.instruments.filter(i => ['cn', 'asia'].includes(i.group) && state.quotes[i.id]).map(i => ({ ...i, q: state.quotes[i.id] }));
+  const stocks = state.config.instruments.filter(i => ['cn', 'asia', 'europe', 'us'].includes(i.group) && i.analyze && state.quotes[i.id]).map(i => ({ ...i, q: state.quotes[i.id] }));
   const up = stocks.filter(i => i.q.changePct > 0).length, down = stocks.filter(i => i.q.changePct < 0).length, flat = stocks.length - up - down;
   $('#breadth').innerHTML = `<span style="flex:${up || .01};background:var(--up)"></span><span style="flex:${flat || .01};background:var(--subtle)"></span><span style="flex:${down || .01};background:var(--down)"></span>`;
   $('#breadth-labels').innerHTML = `<span class="up"><b>${up}</b>上涨</span><span class="muted"><b>${flat}</b>平盘</span><span class="down"><b>${down}</b>下跌</span>`;
   const sorted = [...stocks].sort((a, b) => b.q.changePct - a.q.changePct);
   const mover = (i, label) => i ? `<div class="mover"><div><small>${label}</small>${i.name}</div><strong class="${tone(i.q.changePct)}">${signed(i.q.changePct)}</strong></div>` : '';
-  $('#movers').innerHTML = mover(sorted[0], '当前涨幅最高') + mover(sorted.at(-1), '当前涨幅最低');
+  $('#movers').innerHTML = mover(sorted[0], '最近报价涨幅最高') + mover(sorted.at(-1), '最近报价涨幅最低');
   const ids = ['nq', 'kospi', 'hsi', 'tl', 'xau'];
   const scale = Math.max(1, ...ids.map(id => Math.abs(state.quotes[id]?.changePct || 0)));
   $('#comparison').innerHTML = ids.map(id => {
@@ -81,20 +86,75 @@ function renderSidebar() {
     return `<div class="compare-row"><div class="compare-label"><span>${item.name}</span><b class="${tone(q.changePct)}">${signed(q.changePct)}</b></div><div class="bar-track" title="${item.name} ${signed(q.changePct)}"><span class="bar-fill ${tone(q.changePct)}" style="width:${width}%;left:${q.changePct < 0 ? 50 - width : 50}%"></span></div></div>`;
   }).join('');
 }
-function fundChart(history, name) {
-  if (!history?.length || history.length < 2) return '<p class="small muted">暂无历史净值</p>';
-  const lo = Math.min(...history.map(x => x.value)), hi = Math.max(...history.map(x => x.value)), span = hi - lo || 1;
-  const points = history.map((p, i) => `${(i / (history.length - 1) * 300).toFixed(2)},${(52 - (p.value - lo) / span * 44).toFixed(2)}`).join(' ');
-  const ret = (history.at(-1).value / history[0].value - 1) * 100;
-  return `<svg class="fund-chart" viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="${name}从${history[0].date}至${history.at(-1).date}，含分红再投累计回报${signed(ret)}"><line x1="0" y1="55" x2="300" y2="55"/><polyline points="${points}"/></svg>`;
+function signalHTML(t) {
+  const s = assess(t);
+  return `<span class="signal signal-${s.key}">${s.label}</span>`;
 }
-function renderFunds() {
-  $('#fund-grid').innerHTML = state.config.funds.map(f => {
-    const q = state.funds[f.id];
-    return `<article class="fund-card"><h3><a href="https://fund.eastmoney.com/${f.id}.html" target="_blank" rel="noopener noreferrer">${f.name} ↗</a></h3><div class="fund-code">${f.id} <span> / </span> ${f.type}</div>${q ? `<div class="fund-values"><div><span class="value-label">单位净值 · 元</span><strong class="fund-nav">${price(q.nav, 4)}</strong></div><div class="num"><span class="value-label">当日回报 · 含分红</span><strong class="fund-pct ${tone(q.changePct)}">${signed(q.changePct)}</strong></div></div>${fundChart(q.history, f.name)}<div class="fund-footer"><span>近${q.history?.length || 0}个估值日 · 含分红</span><span>净值日期 ${q.navDate}</span></div>` : '<div class="empty">暂无已公布净值</div>'}</article>`;
-  }).join('');
+function analysisRow(item, star, name) {
+  const a = state.analysis[item.id] || {}, v = a.valuation, t = a.technical;
+  const valuation = validValuation(v) ? `<strong class="pe-value">${price(v.pe)}<small>×</small></strong><span class="metric-sub">PE1 · ${esc(v.date.slice(5))}${ageMinutes(v.date + 'T23:59:59+08:00') > 10 * 1440 ? ' 较旧' : ''}</span>` : '<span class="muted">—</span><span class="metric-sub">估值暂缺</span>';
+  return `<tr class="market-row">${star}${name}<td class="num valuation-cell">${valuation}</td><td class="num">${signalHTML(t)}<span class="metric-sub">${t ? `收盘 ${esc(t.asOf.slice(5))}` : '等待日线'}</span></td><td class="analysis-action"><button data-analyze="${item.id}" aria-label="查看${item.name}的估值与买点分析">查看分析 <span aria-hidden="true">↗</span></button></td></tr>`;
 }
-function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); renderFunds(); }
+function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); }
+function setView(view) {
+  state.view = view;
+  if (view === 'analysis' && ['bonds', 'futures', 'gold'].includes(state.active)) {
+    state.active = 'all';
+    for (const b of $('#tabs').querySelectorAll('button')) { const selected = b.dataset.group === 'all'; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', String(selected)); }
+  }
+  for (const b of document.querySelectorAll('[data-view]')) {
+    b.classList.toggle('selected', b.dataset.view === view);
+    b.setAttribute('aria-pressed', String(b.dataset.view === view));
+  }
+  const analysis = view === 'analysis';
+  $('#nav-analysis').classList.toggle('active', analysis); $('#nav-quotes').classList.toggle('active', !analysis);
+  $('#analysis-caption').hidden = !analysis;
+  $('#price-heading').textContent = analysis ? '估值 PE1' : '最新价';
+  $('#signal-heading').hidden = !analysis; $('#sort').hidden = analysis;
+  $('#time-heading').innerHTML = analysis ? '详情' : '报价时间 <span>北京时间</span>';
+  $('.quote-table').classList.toggle('analysis-table', analysis);
+  renderMarkets();
+}
+function seriesChart(t, name) {
+  const rows = t?.history;
+  if (!Array.isArray(rows) || rows.length < 2) return '';
+  const lo = Math.min(...rows.map(p => p.close)), hi = Math.max(...rows.map(p => p.close)), span = hi - lo || 1;
+  const points = rows.map((p, i) => `${(i / (rows.length - 1) * 660).toFixed(1)},${(134 - (p.close - lo) / span * 124).toFixed(1)}`).join(' ');
+  return `<div class="history-chart"><div><h3>近${rows.length}个交易日</h3><span>价格指数 · 不含分红再投</span></div><svg viewBox="0 0 660 145" role="img" aria-label="${esc(name)}近${rows.length}个交易日收盘走势"><line x1="0" y1="140" x2="660" y2="140"/><polyline points="${points}"/></svg><div class="chart-dates"><span>${esc(rows[0].date)}</span><span>${esc(rows.at(-1).date)}</span></div></div>`;
+}
+function metric(label, value, note) { return `<div class="analysis-metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`; }
+function sourceLink(url, label) { return /^https:\/\//.test(url || '') ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>` : esc(label); }
+function showDialog(title, kicker, content) {
+  $('#dialog-title').textContent = title; $('#dialog-kicker').textContent = kicker;
+  $('#dialog-content').innerHTML = content;
+  $('#analysis-dialog').showModal();
+}
+function showAnalysis(id) {
+  const item = meta(id); if (!item?.analyze) return;
+  const a = state.analysis[id] || {}, v = validValuation(a.valuation) ? a.valuation : null;
+  const t = a.technical, pb = a.factsheet, s = assess(t);
+  const dated = v ? `${esc(v.date)} · 总股本口径` : '暂无可靠同口径数据';
+  const valuation = metric('市盈率 PE1', v ? `${price(v.pe)}<small>倍</small>` : '—', dated) +
+    metric('市净率 PB', pb?.pb > 0 ? `${price(pb.pb)}<small>倍</small>` : '—', pb?.pb > 0 ? `${esc(pb.date)} · 月度计算用股本口径` : '暂无可靠同口径数据') +
+    metric('股息率1', v?.dividendYield > 0 ? `${price(v.dividendYield)}<small>%</small>` : '—', dated);
+  const tech = t ? metric(`距近${t.sampleSize}日收盘高点`, `${signed(t.drawdownPct)}`, `高点 ${price(t.high252)}`) +
+    metric('相对200日均线', Number.isFinite(t.distance200Pct) ? signed(t.distance200Pct) : '—', Number.isFinite(t.ma200) ? `均线 ${price(t.ma200)}` : '日线不足200个交易日') +
+    metric('RSI · 14日', price(t.rsi14, 1), '0—100 · 越高近期涨势越强') : '<p class="muted">暂未取得足够的收盘日线。</p>';
+  showDialog(item.name, 'VALUATION & BUYING REFERENCE', `
+    <p class="dialog-symbol">${esc(item.symbol)} · ${sourceLink(item.url, '源站行情')}</p>
+    <h3 class="dialog-section-title">基本面估值</h3><div class="metrics-grid">${valuation}</div>
+    <p class="inline-note">PE1和PB的日期、股本口径可能不同。缺少长期同口径PE序列，暂不提供历史估值分位；低PE也不等于一定低估。</p>
+    <div class="signal-summary">${signalHTML(t)}<p>${esc(s.description)}</p></div>
+    <h3 class="dialog-section-title">买点参考 · ${t ? esc(t.asOf) + ' 已收盘' : '等待收盘数据'}</h3><div class="metrics-grid">${tech}</div>
+    ${t ? `<div class="position-line"><div><span>近${t.sampleSize}日价格位置</span><strong>${price(t.pricePositionPct, 1)}%</strong></div><progress max="100" value="${Math.min(100, Math.max(0, t.pricePositionPct))}" aria-label="近252日价格位置"></progress><p>按区间最低与最高收盘价计算，属于价格位置，不是估值分位。</p></div>` : ''}
+    ${seriesChart(t, item.name)}
+    <details class="rules-details"><summary>查看判断规则与适用范围</summary>${rulesContent()}</details>
+    <div class="analysis-sources">${v ? sourceLink(v.url, `PE / 股息率：${v.source} ${v.date}`) : '<span>PE / 股息率：暂无可靠数据</span>'}${pb ? sourceLink(pb.url, `${pb.pb > 0 ? 'PB' : '月度单张未披露PB'}：${pb.source} ${pb.date}`) : '<span>PB：暂无可靠数据</span>'}${t ? sourceLink(t.url, `日线：${t.source} · 收盘截至 ${t.asOf}`) : ''}</div>`);
+}
+function rulesContent() {
+  return `<p class="inline-note">面向长期、小额分批研究，按下列顺序匹配第一项。判断只使用已收盘日线，不预测底部、次日涨跌或收益；估值单独展示，不混入未经验证的综合分数。</p><ol class="rules-list">${RULES.map(([name, text]) => `<li><strong>${name}</strong><span>${text}</span></li>`).join('')}</ol><p class="inline-note">至少252个有效交易日才判断；日线超过14个自然日暂停判断。200日均线为简单平均，RSI14采用Wilder平滑。所有价格指标基于当地价格指数，不含分红或人民币汇率；QDII还受汇率、费用和跟踪误差影响。规则未经收益优化回测，“回撤观察”并非确定买点。</p>`;
+}
+
 async function get(url, encoding) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
@@ -109,12 +169,16 @@ async function snapshot() {
   const data = await get(`./data/quotes.json?t=${Date.now()}`);
   if (data.schemaVersion !== 1 || !data.quotes) throw new Error('Invalid snapshot');
   mergeQuotes(state.quotes, data.quotes);
-  for (const [id, q] of Object.entries(data.funds || {})) {
-    if (!Number.isFinite(q.nav) || !Number.isFinite(q.changePct) || !/^\d{4}-\d{2}-\d{2}$/.test(q.navDate)) continue;
-    if (!state.funds[id] || q.navDate >= state.funds[id].navDate) state.funds[id] = q;
+  for (const [id, a] of Object.entries(data.analysis || {})) {
+    const current = state.analysis[id] ||= {};
+    for (const field of ['technical', 'valuation', 'factsheet']) {
+      const next = a[field]; if (!next) continue;
+      const dateKey = field === 'technical' ? 'asOf' : 'date';
+      if (!current[field] || next[dateKey] >= current[field][dateKey]) current[field] = next;
+    }
   }
   state.snapshotAt = data.generatedAt;
-  $('#snapshot-info').textContent = `仓库快照生成于 ${chnDate(data.generatedAt)} ${cnTime(data.generatedAt)}（北京时间）。页面直连报价可能比快照更新。`;
+  $('#snapshot-info').textContent = `仓库快照生成于 ${chnDate(data.generatedAt)} ${cnTime(data.generatedAt)} · 北京时间。估值与收盘指标随快照更新。`;
   render();
   return true;
 }
@@ -133,7 +197,7 @@ async function refresh() {
     direct += mergeQuotes(state.quotes, parsed); render();
   }));
   // Independent small batches avoid one market's endpoint failure blocking everything.
-  for (const group of [emItems.filter(i => i.group === 'asia'), emItems.filter(i => i.group !== 'asia')]) {
+  for (const group of [emItems.filter(i => ['asia', 'europe', 'cn'].includes(i.group)), emItems.filter(i => !['asia', 'europe', 'cn'].includes(i.group))]) {
     tasks.push(get(emURL + group.map(i => i.eastmoney).join(',') + `&_=${Date.now()}`).then(data => {
       const parsed = parseEastmoney(data, group); if (!Object.keys(parsed).length) throw new Error('Empty Eastmoney data');
       direct += mergeQuotes(state.quotes, parsed); render();
@@ -169,6 +233,7 @@ $('#tabs').addEventListener('click', e => { const button = e.target.closest('but
 $('#search').addEventListener('input', e => { state.search = e.target.value.trim().toLowerCase(); renderMarkets(); });
 $('#sort').addEventListener('click', () => { state.sort = state.sort === 0 ? -1 : state.sort === -1 ? 1 : 0; renderMarkets(); });
 $('#market-body').addEventListener('click', e => {
+  const detail = e.target.closest('button[data-analyze]'); if (detail) { showAnalysis(detail.dataset.analyze); return; }
   const b = e.target.closest('button[data-watch]'); if (!b) return;
   const id = b.dataset.watch;
   if (watch.has(id)) watch.delete(id); else watch.add(id);
@@ -177,6 +242,12 @@ $('#market-body').addEventListener('click', e => {
   $('#status').setAttribute('aria-label', `${b.getAttribute('aria-label')}成功`);
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#auto').checked && state.config && state.lastRefresh && Date.now() - state.lastRefresh > 30000) refresh(); });
+$('.view-switch').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
+$('#nav-quotes').addEventListener('click', () => { if (state.config) setView('quotes'); });
+$('#nav-analysis').addEventListener('click', () => { if (state.config) setView('analysis'); });
+$('#rules-open').addEventListener('click', () => showDialog('买点参考如何判断', 'TRANSPARENT RULES', rulesContent()));
+$('#dialog-close').addEventListener('click', () => $('#analysis-dialog').close());
+$('#analysis-dialog').addEventListener('click', e => { if (e.target === e.currentTarget) { const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.currentTarget.close(); } });
 updateThemeLabel(); tick(); setInterval(tick, 1000);
 try {
   state.config = await get('./config.json');
