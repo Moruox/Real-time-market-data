@@ -1,7 +1,7 @@
-import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-5';
-import { createQDII } from './qdii.js?v=terminal-5';
-import { assess, validValuation, RULES } from './analysis.js?v=terminal-5';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-5';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-6';
+import { createQDII } from './qdii.js?v=terminal-6';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-6';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-6';
 const $ = s => document.querySelector(s);
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
 const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
@@ -36,7 +36,7 @@ function row(item) {
   const star=`<td class="star-cell"><button class="star" data-watch="${item.id}" aria-label="${watch.has(item.id)?'取消关注':'关注'}${item.name}" aria-pressed="${watch.has(item.id)}">${watch.has(item.id)?'★':'☆'}</button></td>`;
   const name=`<td class="name-cell"><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.name}</a><span class="symbol">${item.symbol}</span></td>`;
   const label=q?quoteLabel(item,q):null;
-  const valuation=validValuation(v)?`<span class="pe-value">${price(v.pe)}<small> / ${pb?.pb>0?price(pb.pb):'—'}</small></span><span class="metric-sub">PE ${esc(v.date.slice(5))}${pb?.pb>0?` · PB ${esc(pb.date.slice(5))}`:''}</span>`:`<span class="muted">—</span><span class="metric-sub">${item.analyze?'估值暂缺':'不适用'}</span>`;
+  const valuation=item.assetType==='goldETF'?'<span class="muted">不适用</span><span class="metric-sub">黄金无PE / PB</span>':validValuation(v)?`<span class="pe-value">${price(v.pe)}<small> / ${pb?.pb>0?price(pb.pb):'—'}</small></span><span class="metric-sub">PE ${esc(v.date.slice(5))}${pb?.pb>0?` · PB ${esc(pb.date.slice(5))}`:''}</span>`:`<span class="muted">—</span><span class="metric-sub">${item.analyze?'估值暂缺':'不适用'}</span>`;
   const signal=item.analyze?`<button class="signal-button" data-analyze="${item.id}" aria-label="查看${item.name}的估值与买点分析">${signalHTML(t)}</button>`:'<span class="muted">—</span>';
   const time=q?`<time class="time-primary" datetime="${esc(q.quoteAt)}">${chnDate(q.quoteAt).slice(5)} ${cnTime(q.quoteAt)}</time><span class="source ${label.warning?'warning':''}">${esc(label.text)}</span>`:'<span class="source warning">暂无有效报价</span>';
   return `<tr class="market-row">${star}${name}<td class="num price-cell" data-label="最新价"><strong class="price">${q?price(q.price,item.digits):'—'}</strong></td><td class="num change-cell" data-label="涨跌幅" title="${esc(q?.basis)}">${q?moneyClass(q.changePct):'—'}</td><td class="trend-cell" data-label="近60日走势">${t?sparkline(t.history,'close',item.name+'近60日收盘走势'): '<span class="muted">—</span>'}</td><td class="num valuation-cell" data-label="PE1 / PB">${valuation}</td><td class="num drawdown-cell" data-label="高点回撤" title="近252交易日收盘高点回撤，不是估值分位">${t?`<strong>${signed(t.drawdownPct)}</strong><span class="metric-sub">收盘 ${esc(t.asOf.slice(5))}</span>`:'<span class="muted">—</span>'}</td><td class="signal-cell" data-label="买点参考">${signal}</td><td class="quote-time">${time}${item.analyze?`<button class="detail-link" data-analyze="${item.id}">分析详情 ↗</button>`:''}</td></tr>`;
@@ -89,7 +89,7 @@ function signalHTML(t) {
   const s = assess(t);
   return `<span class="signal signal-${s.key}">${s.label}</span>`;
 }
-const qdii=createQDII({get,showDialog});
+const qdii=createQDII({get,showDialog,showAnalysis});
 function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); qdii.setMarkets(state.quotes,state.analysis); }
 function setPage(page, updateHash=false) {
   state.page=page==='qdii'?'qdii':'market';
@@ -104,12 +104,12 @@ function setPage(page, updateHash=false) {
   if(isQDII)qdii.refresh();
 }
 
-function seriesChart(t, name) {
+function seriesChart(t, name, isETF=false) {
   const rows = t?.history;
   if (!Array.isArray(rows) || rows.length < 2) return '';
   const lo = Math.min(...rows.map(p => p.close)), hi = Math.max(...rows.map(p => p.close)), span = hi - lo || 1;
   const points = rows.map((p, i) => `${(i / (rows.length - 1) * 660).toFixed(1)},${(134 - (p.close - lo) / span * 124).toFixed(1)}`).join(' ');
-  return `<div class="history-chart"><div><h3>近${rows.length}个交易日</h3><span>价格指数 · 不含分红再投</span></div><svg viewBox="0 0 660 145" role="img" aria-label="${esc(name)}近${rows.length}个交易日收盘走势"><line x1="0" y1="140" x2="660" y2="140"/><polyline points="${points}"/></svg><div class="chart-dates"><span>${esc(rows[0].date)}</span><span>${esc(rows.at(-1).date)}</span></div></div>`;
+  return `<div class="history-chart"><div><h3>近${rows.length}个交易日</h3><span>${isETF?'ETF日线 · 源站价格口径':'价格指数 · 不含分红再投'}</span></div><svg viewBox="0 0 660 145" role="img" aria-label="${esc(name)}近${rows.length}个交易日收盘走势"><line x1="0" y1="140" x2="660" y2="140"/><polyline points="${points}"/></svg><div class="chart-dates"><span>${esc(rows[0].date)}</span><span>${esc(rows.at(-1).date)}</span></div></div>`;
 }
 function metric(label, value, note) { return `<div class="analysis-metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`; }
 function sourceLink(url, label) { return /^https:\/\//.test(url || '') ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>` : esc(label); }
@@ -131,17 +131,16 @@ function showAnalysis(id) {
     metric('RSI · 14日', price(t.rsi14, 1), '0—100 · 越高近期涨势越强') : '<p class="muted">暂未取得足够的收盘日线。</p>';
   showDialog(item.name, 'VALUATION & BUYING REFERENCE', `
     <p class="dialog-symbol">${esc(item.symbol)} · ${sourceLink(item.url, '源站行情')}</p>
-    <h3 class="dialog-section-title">基本面估值</h3><div class="metrics-grid">${valuation}</div>
-    <p class="inline-note">PE1和PB的日期、股本口径可能不同。缺少长期同口径PE序列，暂不提供历史估值分位；低PE也不等于一定低估。</p>
+    ${item.assetType==='goldETF'?'<h3 class="dialog-section-title">黄金价格参考</h3><p class="inline-note">黄金不产生企业利润，PE、PB与股息率不适用。下面是518880自身已收盘价格的回撤、均线、RSI与区间位置，不是黄金内在价值估算或估值分位。场内ETF成交价还可能偏离基金净值；当前没有同步IOPV，因此不估算实时折溢价。</p>':`<h3 class="dialog-section-title">基本面估值</h3><div class="metrics-grid">${valuation}</div><p class="inline-note">PE1和PB的日期、股本口径可能不同。缺少长期同口径PE序列，暂不提供历史估值分位；低PE也不等于一定低估。</p>`}
     <div class="signal-summary">${signalHTML(t)}<p>${esc(s.description)}</p></div>
     <h3 class="dialog-section-title">买点参考 · ${t ? esc(t.asOf) + ' 已收盘' : '等待收盘数据'}</h3><div class="metrics-grid">${tech}</div>
     ${t ? `<div class="position-line"><div><span>近${t.sampleSize}日价格位置</span><strong>${price(t.pricePositionPct, 1)}%</strong></div><progress max="100" value="${Math.min(100, Math.max(0, t.pricePositionPct))}" aria-label="近252日价格位置"></progress><p>按区间最低与最高收盘价计算，属于价格位置，不是估值分位。</p></div>` : ''}
-    ${seriesChart(t, item.name)}
+    ${seriesChart(t, item.name, item.assetType==='goldETF')}
     <details class="rules-details"><summary>查看判断规则与适用范围</summary>${rulesContent()}</details>
-    <div class="analysis-sources">${v ? sourceLink(v.url, `PE / 股息率：${v.source} ${v.date}`) : '<span>PE / 股息率：暂无可靠数据</span>'}${pb ? sourceLink(pb.url, `${pb.pb > 0 ? 'PB' : '月度单张未披露PB'}：${pb.source} ${pb.date}`) : '<span>PB：暂无可靠数据</span>'}${t ? sourceLink(t.url, `日线：${t.source} · 收盘截至 ${t.asOf}`) : ''}</div>`);
+    <div class="analysis-sources">${item.assetType==='goldETF'?'':v ? sourceLink(v.url, `PE / 股息率：${v.source} ${v.date}`) : '<span>PE / 股息率：暂无可靠数据</span>'}${item.assetType==='goldETF'?'':pb ? sourceLink(pb.url, `${pb.pb > 0 ? 'PB' : '月度单张未披露PB'}：${pb.source} ${pb.date}`) : '<span>PB：暂无可靠数据</span>'}${t ? sourceLink(t.url, `日线：${t.source} · 收盘截至 ${t.asOf}`) : ''}</div>`);
 }
 function rulesContent() {
-  return `<p class="inline-note">面向长期、小额分批研究，按下列顺序匹配第一项。判断只使用已收盘日线，不预测底部、次日涨跌或收益；估值单独展示，不混入未经验证的综合分数。</p><ol class="rules-list">${RULES.map(([name, text]) => `<li><strong>${name}</strong><span>${text}</span></li>`).join('')}</ol><p class="inline-note">至少252个有效交易日才判断；日线超过14个自然日暂停判断。200日均线为简单平均，RSI14采用Wilder平滑。所有价格指标基于当地价格指数，不含分红或人民币汇率；QDII还受汇率、费用和跟踪误差影响。规则未经收益优化回测，“回撤观察”并非确定买点。</p>`;
+  return `<p class="inline-note">面向长期、小额分批研究，按下列顺序匹配第一项。判断只使用已收盘日线，不预测底部、次日涨跌或收益；估值单独展示，不混入未经验证的综合分数。</p><ol class="rules-list">${RULES.map(([name, text]) => `<li><strong>${name}</strong><span>${text}</span></li>`).join('')}</ol><p class="inline-note">至少252个有效交易日才判断；日线超过14个自然日暂停判断。200日均线为简单平均，RSI14采用Wilder平滑。价格指标基于对应指数或ETF的日线，ETF以源站价格口径为准；不作跨币种换算；QDII还受汇率、费用和跟踪误差影响。规则未经收益优化回测，“回撤观察”并非确定买点。</p>`;
 }
 
 async function get(url, encoding, timeoutMs = 12000) {

@@ -6,9 +6,9 @@
   <meta name="description" content="全球市场行情、指数估值与买点参考，以及场外QDII分类、申购限额、净值走势和标的分析。">
   <title>市场脉搏 · 全球市场终端</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=terminal-5">
+  <link rel="stylesheet" href="styles.css?v=terminal-6">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('market-theme')||'dark'}catch{}</script>
-  <script src="app.js?v=terminal-5" type="module"></script>
+  <script src="app.js?v=terminal-6" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">跳转到行情</a>
@@ -44,6 +44,7 @@
     <section class="panel quota-panel" aria-labelledby="quota-title">
       <div class="panel-heading"><div><span class="section-kicker">OTC QDII / SUBSCRIPTION MONITOR</span><h2 id="quota-title" tabindex="-1">场外QDII基金限额</h2></div><label class="search-box"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="quota-search" type="search" placeholder="基金名称 / 代码 / 机构" aria-label="搜索QDII基金名称或代码"></label></div>
       <div class="quota-index-tabs tabs" id="quota-index-tabs" role="group" aria-label="基金类型"><button data-category="all" class="selected" aria-pressed="true">全部QDII</button><button data-category="index" class="" aria-pressed="false">指数基金</button><button data-category="active" class="" aria-pressed="false">主动权益</button><button data-category="bond" class="" aria-pressed="false">海外债券</button><button data-category="commodity" class="" aria-pressed="false">黄金 / 商品</button><button data-category="reit" class="" aria-pressed="false">REITs</button><button data-category="allocation" class="" aria-pressed="false">多资产 / FOF</button></div>
+      <div id="gold-etf-research" class="gold-etf-research" hidden></div>
       <div class="quota-filters"><label>指数 / 方向<select id="quota-direction" aria-label="筛选指数或投资方向"><option value="all">全部指数 / 方向</option></select></label><label>份额类别<select id="quota-class" aria-label="筛选基金份额类别"><option value="all">全部类别</option><option value="A">A类</option><option value="C">C类</option><option value="other">其他类别</option></select></label><label>币种<select id="quota-currency" aria-label="筛选基金币种"><option value="all">全部币种</option><option value="CNY">人民币</option><option value="USD">美元</option></select></label><label>排序<select id="quota-sort" aria-label="QDII基金排序"><option value="available">可申购优先</option><option value="limit">已披露限额从高到低</option><option value="code">基金代码</option></select></label><label class="only-open"><input id="quota-only-open" type="checkbox">仅看可申购</label></div>
       <div class="quota-channel"><span class="channel-label">天天基金公开渠道</span><span id="quota-stamp">等待限额快照</span><button id="quota-reload" class="text-button">重新读取快照 ↻</button></div>
       <p class="quota-note">限额为查询时渠道页面的普通申购信息；支付宝、银行和直销可能不同。同一基金不同份额可能合并限额，请勿把各行金额直接相加。</p>

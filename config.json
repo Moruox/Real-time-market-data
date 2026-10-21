@@ -635,6 +635,23 @@
       "digits": 2,
       "unit": "元/克",
       "url": "https://finance.sina.com.cn/futures/quotes/AU0.shtml"
+    },
+    {
+      "id": "goldETF",
+      "name": "华安黄金ETF",
+      "symbol": "518880.SH · 场内ETF",
+      "group": "gold",
+      "tencent": "sh518880",
+      "sina": "sh518880",
+      "eastmoney": "1.518880",
+      "digits": 3,
+      "unit": "元/份",
+      "url": "https://www.huaan.com.cn/funds/518880/index.shtml",
+      "analyze": true,
+      "assetType": "goldETF",
+      "zone": "Asia/Shanghai",
+      "closeAfter": "15:15",
+      "historyTencent": "sh518880"
     }
   ]
 }

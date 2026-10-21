@@ -1,6 +1,6 @@
-import {assess,validValuation} from './analysis.js?v=terminal-5';
-import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-5';
-import {chnDate,cnTime} from './quotes.js?v=terminal-5';
+import {assess,validValuation} from './analysis.js?v=terminal-6';
+import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-6';
+import {chnDate,cnTime} from './quotes.js?v=terminal-6';
 export function quotaState(fund,now=Date.now()) {
   const q=fund?.quota;
   if(!q)return {key:'unknown',label:'尚未核实',available:false,limit:'—',note:'缺少渠道数据'};
@@ -27,16 +27,25 @@ export function fundInsight(f,analysis={},now=Date.now()) {
   const pe=v?`PE ${price(v.pe)}`:'PE —',pb=Number.isFinite(p?.pb)&&p.pb>0?`PB ${price(p.pb)}`:'PB —';
   return {valuation:v||p?.pb>0?`${pe} / ${pb}`:'估值暂缺',note:`标的指数${v?' · PE '+v.date:''}${p?.pb>0?' · PB '+p.date:''}`,signal:assess(a.technical,now),asOf:a.technical?.asOf,source:v?.url||v?.sourceUrl||p?.url};
 }
-export function createQDII({get,showDialog}) {
+export function createQDII({get,showDialog,showAnalysis}) {
   const $=s=>document.querySelector(s);
   const state={data:null,index:'all',category:'all',share:'all',currency:'all',onlyOpen:false,search:'',sort:'available',page:1,size:24,busy:false,lastFetch:0,quotes:{},analysis:{},activeFund:null,range:90,fullHistory:null,historyPromise:null};
   if(window.matchMedia('(max-width:600px)').matches)$('#benchmark-fold').open=false;
-  function setMarkets(quotes,analysis){state.quotes=quotes;state.analysis=analysis;renderBenchmarks();if(state.data)render();}
+  function setMarkets(quotes,analysis){state.quotes=quotes;state.analysis=analysis;renderBenchmarks();renderGold();if(state.data)render();}
   function renderBenchmarks(){
     $('#qdii-benchmarks').innerHTML=[['ndx','纳斯达克100','NASDAQ 100'],['sp500','标普500','S&P 500']].map(([id,name,en])=>{
       const q=state.quotes[id],t=state.analysis[id]?.technical;
       return `<article class="panel benchmark-card"><div class="benchmark-head"><div><span class="section-kicker">${en}</span><h3>${name}</h3></div><span class="benchmark-tag">价格指数</span></div><div class="benchmark-content"><div><strong class="benchmark-price">${q?price(q.price):'—'}</strong><span class="benchmark-change ${tone(q?.changePct)}">${q?signed(q.changePct):'—'}</span><p>${q?`${chnDate(q.quoteAt).slice(5)} ${cnTime(q.quoteAt).slice(0,5)} · 北京时间`:'等待指数报价'}</p></div><div class="benchmark-spark">${t?sparkline(t.history,'close',name+'近252日收盘走势',252):''}<span>${t?`近252交易日 · 截至${t.asOf}`:'等待收盘日线'}</span></div></div></article>`;
     }).join('');
+  }
+  function renderGold(){
+    const el=$('#gold-etf-research');
+    el.hidden=state.category!=='commodity'||!['all','gold'].includes(state.index);
+    if(el.hidden)return;
+    const q=state.quotes.goldETF,t=state.analysis.goldETF?.technical,signal=assess(t);
+    const value=(label,number,note)=>`<div><span>${label}</span><strong>${number}</strong><small>${note}</small></div>`;
+    el.innerHTML=`<div class="gold-research-heading"><div><span class="section-kicker">DOMESTIC GOLD ETF</span><h3>华安黄金ETF <span class="mono">518880</span></h3></div><span class="benchmark-tag">国内场内ETF · 非QDII</span></div><div class="gold-research-metrics">${value('场内价格',q?price(q.price,3)+' 元':'—',q?`${signed(q.changePct)} · ${chnDate(q.quoteAt)} ${cnTime(q.quoteAt)} 北京时间`:'等待行情')}${value('距252日收盘高点',t?signed(t.drawdownPct):'—',t?`日线截至 ${esc(t.asOf)}`:'等待收盘日线')}${value('200日均线偏离 / RSI14',t?`${signed(t.distance200Pct)} / ${price(t.rsi14,1)}`:'—','价格指标，不是估值')}${value('近252日价格位置',t?price(t.pricePositionPct,1)+'%':'—','0%为区间最低，100%为最高')}</div><div class="gold-research-bottom"><div class="gold-spark">${t?sparkline(t.history,'close','华安黄金ETF近60日收盘走势',60):''}<span>近60个交易日收盘走势</span></div><button class="signal signal-${signal.key}" id="gold-etf-analysis">${signal.label} · 查看分析 ↗</button></div><p class="inline-note">黄金不适用PE、PB；买点参考按ETF自身已收盘价格计算。价格位置不等于估值分位，也不代表实时折溢价。此卡仅供行情研究，不计入下方场外QDII额度。</p>`;
+    $('#gold-etf-analysis').addEventListener('click',()=>showAnalysis('goldETF'));
   }
   function renderOverview(){
     const funds=Object.values(state.data?.funds || {}),open=funds.filter(f=>quotaState(f).available).length;
@@ -59,6 +68,7 @@ export function createQDII({get,showDialog}) {
     return `<tr class="fund-row"><td class="fund-name-cell"><button class="fund-name-button" data-fund="${f.code}" aria-label="查看${esc(f.name)}的限额与走势">${esc(f.name)}</button><span class="fund-code mono">${f.code}</span><div class="fund-tags">${tags}</div></td><td class="fund-status" data-label="渠道状态"><span class="quota-status status-${v.key}">${v.label}</span><span class="metric-sub">定投：${esc(q?.dcaStatus || '未核实')}</span></td><td class="num fund-limit" data-label="日申购限额"><strong class="limit-value ${v.available?'available':''}">${esc(v.limit)}</strong><span class="metric-sub">${esc(v.note)}</span></td><td class="num fund-minimum" data-label="申购起点"><span class="mono">${minimum}</span></td><td class="num fund-nav" data-label="单位净值">${nav}</td><td class="num fund-change" data-label="净值日涨跌"><span class="${tone(n?.changePct)} mono">${signed(n?.changePct)}</span></td><td class="fund-trend" data-label="近60个净值日">${n?sparkline(n.history,'nav',f.name+'单位净值走势',60):'<span class="muted">暂无曲线</span>'}</td><td class="fund-valuation" data-label="标的估值"><strong>${esc(info.valuation)}</strong><span class="metric-sub">${esc(info.note)}</span></td><td class="fund-signal" data-label="买点参考"><button class="signal signal-${info.signal.key}" data-fund="${f.code}" title="${esc(info.signal.description)}">${esc(info.signal.label)}</button><span class="metric-sub">${info.asOf?`指数收盘 ${esc(info.asOf)}`:esc(info.note)}</span></td><td class="fund-action"><button class="detail-link" data-fund="${f.code}" aria-label="查看${esc(f.code)}基金详情">限额 / 走势 ↗</button></td></tr>`;
   }
   function render(){
+    renderGold();
     if(!state.data)return;
     const all=Object.values(state.data.funds || {});let funds=filterFunds(all,state);
     funds.sort((a,b)=>{

@@ -29,7 +29,11 @@ class DataTests(unittest.TestCase):
             self.assertTrue(m.valid(q['price'], q['changePct']))
             self.assertIn('quoteAt', q)
         self.assertNotIn('funds', data)
-        self.assertEqual(len(config['instruments']), 45)
+        self.assertGreaterEqual(len(config['instruments']), 45)
+        gold = next(i for i in config['instruments'] if i['id']=='goldETF')
+        self.assertEqual(gold['tencent'], 'sh518880')
+        self.assertNotIn('csindex', gold)
+        self.assertIn('technical', data['analysis']['goldETF'])
         for item in config['instruments']:
             if not item.get('analyze'):
                 continue
