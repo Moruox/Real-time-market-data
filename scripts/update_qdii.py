@@ -7,9 +7,12 @@ import math
 import pathlib
 import re
 import subprocess
+import sys
 from zoneinfo import ZoneInfo
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.fund_nav import adjusted_nav
 CN = ZoneInfo('Asia/Shanghai')
 CATALOG_URL = 'https://fund.eastmoney.com/js/fundcode_search.js'
 TRADE_URL = 'https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=8&page=1,50000&js=reData&sort=fcode,asc'
@@ -91,7 +94,7 @@ def classify(name, kind):
 
 def request(url):
     return subprocess.check_output(['curl','--fail','--compressed','-L','--connect-timeout','4',
-        '--max-time','18','--retry','1','--retry-delay','1','-sS','-A','Mozilla/5.0','-H','Referer: https://fund.eastmoney.com/',url],
+        '--max-time','45' if url.startswith('https://moruox.github.io/') else '18','--retry','1','--retry-delay','1','-sS','-A','Mozilla/5.0','-H','Referer: https://fund.eastmoney.com/',url],
         stderr=subprocess.DEVNULL).decode('utf-8-sig')
 
 
@@ -228,7 +231,7 @@ def nav_series(text, code, now):
             perf[period]=None
     last = points[-1]
     return dict(nav=last['nav'],navDate=last['date'],changePct=last['changePct'],history=[dict(date=p['date'],nav=p['nav']) for p in points],performance=perf,
-        fetchedAt=now.isoformat(timespec='seconds'),source='天天基金已公布净值',url=f'https://fund.eastmoney.com/pingzhongdata/{code}.js')
+        adjusted=adjusted_nav(rows,code,now),fetchedAt=now.isoformat(timespec='seconds'),source='天天基金已公布净值',url=f'https://fund.eastmoney.com/pingzhongdata/{code}.js')
 
 
 def history_update(old, quota):
@@ -253,9 +256,13 @@ def main():
     old=json.loads(path.read_text()) if path.exists() else {}
     issues=[]
     history_path=ROOT/'data/qdii-history.json'
-    full_history=json.loads(history_path.read_text()).get('funds',{}) if history_path.exists() else {}
+    history_data=json.loads(history_path.read_text()) if history_path.exists() else {}
+    full_history=history_data.get('funds',{})
+    adjusted_history=history_data.get('adjustedFunds',{})
     try:
         remote_history=json.loads(request(PUBLIC_URL.replace('qdii.json','qdii-history.json')))
+        for code,points in remote_history.get('adjustedFunds',{}).items():
+            if points and (not adjusted_history.get(code) or points[-1]['date']>=adjusted_history[code][-1]['date']):adjusted_history[code]=points
         for code,points in remote_history.get('funds',{}).items():
             if points and (not full_history.get(code) or points[-1]['date']>=full_history[code][-1]['date']):full_history[code]=points
     except Exception:pass
@@ -286,7 +293,7 @@ def main():
             if previous.get(key) is not None:fund[key]=previous[key]
         if not fund.get('quota',{}).get('verified') or not recent(fund.get('quota',{}),'checkedAt',now,1/6):
             jobs[(code,'quota')]=lambda f=fund:quota_page(request(f"https://fundf10.eastmoney.com/jjfl_{f['code']}.html"),f,now)
-        if not recent(fund.get('navData',{}),'fetchedAt',now,6):
+        if fund.get('navData',{}).get('adjusted',{}).get('version')!=1 or not recent(fund.get('navData',{}),'fetchedAt',now,6):
             jobs[(code,'navData')]=lambda c=code:nav_series(request(f'https://fund.eastmoney.com/pingzhongdata/{c}.js'),c,now)
     executor=concurrent.futures.ThreadPoolExecutor(max_workers=4)
     ordered=sorted(jobs.items(),key=lambda item:(item[0][1]!='quota',funds[item[0][0]].get(item[0][1],{}).get('checkedAt' if item[0][1]=='quota' else 'fetchedAt','')))
@@ -316,10 +323,20 @@ def main():
             merged.update({p['date']:dict(date=p['date'],nav=p['nav']) for p in n['history']})
             full_history[fund['code']]=[merged[d] for d in sorted(merged) if d<=n['navDate']][-252:]
             n['history']=full_history[fund['code']][-60:]
+            adjusted=n.get('adjusted')
+            if adjusted:
+                points=adjusted.get('history',[])
+                prior=adjusted_history.get(fund['code'],[])
+                # Rebased adjusted series cannot be merged point-by-point across runs.
+                if len(points)==adjusted.get('sampleSize'):
+                    adjusted_history[fund['code']]=points
+                elif not prior or not points or prior[-1]!=points[-1]:
+                    adjusted_history[fund['code']]=points
+                adjusted['history']=points[-60:]
         fund['quotaHistory']=history_update(fund.get('quotaHistory'),fund.get('quota'))
     result=dict(schemaVersion=1,generatedAt=now.isoformat(timespec='seconds'),catalogCheckedAt=catalog_at,
         catalogSource=CATALOG_URL,channel='天天基金公开渠道',funds=funds,excluded=excluded,issues=issues)
-    history_path.write_text(json.dumps(dict(generatedAt=result['generatedAt'],funds={code:full_history[code] for code in funds if code in full_history}),ensure_ascii=False,separators=(',',':'))+'\n')
+    history_path.write_text(json.dumps(dict(generatedAt=result['generatedAt'],funds={code:full_history[code] for code in funds if code in full_history},adjustedFunds={code:adjusted_history[code] for code in funds if code in adjusted_history}),ensure_ascii=False,separators=(',',':'))+'\n')
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'))+'\n');temp.replace(path)
     print(json.dumps({'shares':len(funds),'indexShares':sum(f['category']=='index' for f in funds.values()),
         'quotaVerified':sum(bool(f.get('quota',{}).get('verified')) for f in funds.values()),

@@ -6,9 +6,9 @@
   <meta name="description" content="全球市场行情、指数估值与买点参考，以及场外QDII分类、申购限额、净值走势和标的分析。">
   <title>市场脉搏 · 全球市场终端</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=terminal-6">
+  <link rel="stylesheet" href="styles.css?v=terminal-7">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('market-theme')||'dark'}catch{}</script>
-  <script src="app.js?v=terminal-6" type="module"></script>
+  <script src="app.js?v=terminal-7" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">跳转到行情</a>
@@ -48,7 +48,7 @@
       <div class="quota-filters"><label>指数 / 方向<select id="quota-direction" aria-label="筛选指数或投资方向"><option value="all">全部指数 / 方向</option></select></label><label>份额类别<select id="quota-class" aria-label="筛选基金份额类别"><option value="all">全部类别</option><option value="A">A类</option><option value="C">C类</option><option value="other">其他类别</option></select></label><label>币种<select id="quota-currency" aria-label="筛选基金币种"><option value="all">全部币种</option><option value="CNY">人民币</option><option value="USD">美元</option></select></label><label>排序<select id="quota-sort" aria-label="QDII基金排序"><option value="available">可申购优先</option><option value="limit">已披露限额从高到低</option><option value="code">基金代码</option></select></label><label class="only-open"><input id="quota-only-open" type="checkbox">仅看可申购</label></div>
       <div class="quota-channel"><span class="channel-label">天天基金公开渠道</span><span id="quota-stamp">等待限额快照</span><button id="quota-reload" class="text-button">重新读取快照 ↻</button></div>
       <p class="quota-note">限额为查询时渠道页面的普通申购信息；支付宝、银行和直销可能不同。同一基金不同份额可能合并限额，请勿把各行金额直接相加。</p>
-      <div class="table-wrap"><table class="quota-table"><caption class="sr-only">场外QDII基金渠道申购状态、日限额、申购起点及净值走势</caption><thead><tr><th scope="col">基金 / 代码 / 份额</th><th scope="col">渠道状态</th><th scope="col" class="num">日累计申购限额</th><th scope="col" class="num">申购起点</th><th scope="col" class="num">单位净值</th><th scope="col" class="num">净值日涨跌</th><th scope="col">近60个净值日</th><th scope="col">标的估值</th><th scope="col">买点参考</th><th scope="col">详情</th></tr></thead><tbody id="quota-body"><tr><td colspan="10" class="empty">切换到此页后读取基金限额与走势…</td></tr></tbody></table></div>
+      <div class="table-wrap"><table class="quota-table"><caption class="sr-only">场外QDII基金渠道申购状态、日限额、申购起点及净值走势</caption><thead><tr><th scope="col">基金 / 代码 / 份额</th><th scope="col">渠道状态</th><th scope="col" class="num">日累计申购限额</th><th scope="col" class="num">申购起点</th><th scope="col" class="num">单位净值</th><th scope="col" class="num">净值日涨跌</th><th scope="col">近60个净值日</th><th scope="col">标的估值</th><th scope="col">标的指数买点</th><th scope="col">基金净值买点</th><th scope="col">详情</th></tr></thead><tbody id="quota-body"><tr><td colspan="11" class="empty">切换到此页后读取基金限额与走势…</td></tr></tbody></table></div>
       <div class="table-footer"><span id="quota-count">— 个份额</span><div class="pagination"><button id="quota-prev" aria-label="上一页基金">←</button><span id="quota-page-number">1 / 1</span><button id="quota-next" aria-label="下一页基金">→</button></div></div>
       <p class="quota-bottom-note" id="quota-coverage"></p>
     </section>

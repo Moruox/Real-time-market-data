@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {quotaState,filterFunds,fundInsight} from '../qdii.js';
+import {quotaState,filterFunds,fundInsight,fundNavInsight} from '../qdii.js';
 const now=Date.parse('2026-10-21T04:10:00Z');
 const fund={code:'000001',name:'测试纳斯达克100ETF联接A',family:'测试',index:'ndx',currency:'CNY',shareClass:'A',quota:{verified:true,checkedAt:'2026-10-21T12:00:00+08:00',state:'limited',dailyLimit:10,limitText:'10.00元',limitUnit:'元',minimum:1}};
 test('A retained numeric quota does not override a suspended purchase state',()=>{
@@ -29,4 +29,16 @@ test('Active, bond and strategy funds do not inherit broad-index valuations or s
  assert.equal(fundInsight({category:'index',index:'sp500ew'},a,now).valuation,'估值暂缺');
  assert.match(fundInsight({category:'index',benchmark:'ndx'},a,now).valuation,/25/);
  assert.equal(filterFunds([{...fund,category:'index'},{...fund,category:'active'}],{category:'index'},now).length,1);
+});
+
+test('Fund NAV signals require verified adjusted returns and matching dates, not raw NAV',()=>{
+ const t={asOf:'2026-10-20',sampleSize:252,close:100,ma200:102,rsi14:40,drawdownPct:-15,distance200Pct:-2};
+ const f={category:'active',navData:{navDate:'2026-10-20',nav:.8,adjusted:{version:1,method:'published-daily-return-chain-v1',status:'ready',sampleSize:252,asOf:t.asOf,technical:t}}};
+ assert.equal(fundNavInsight(f,now).signal.key,'pullback');
+ assert.equal(fundNavInsight({...f,navData:{navDate:'2026-10-20',nav:.2}},now).signal.key,'missing');
+ assert.equal(fundNavInsight({...f,navData:{...f.navData,navDate:'2026-10-21'}},now).signal.key,'missing');
+ assert.equal(fundNavInsight({...f,category:'bond'},now).signal.label,'仅看走势');
+ assert.equal(fundNavInsight({...f,category:'allocation'},now).signal.label,'仅看走势');
+ assert.equal(fundNavInsight(f,now+30*86400000).signal.key,'stale');
+ assert.equal(fundNavInsight({...f,navData:{...f.navData,adjusted:{...f.navData.adjusted,status:'insufficient'}}},now).signal.key,'missing');
 });

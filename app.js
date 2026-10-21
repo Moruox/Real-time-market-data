@@ -1,7 +1,7 @@
-import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-6';
-import { createQDII } from './qdii.js?v=terminal-6';
-import { assess, validValuation, RULES } from './analysis.js?v=terminal-6';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-6';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-7';
+import { createQDII } from './qdii.js?v=terminal-7';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-7';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-7';
 const $ = s => document.querySelector(s);
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
 const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
