@@ -1,7 +1,7 @@
-import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-3';
-import { createQDII } from './qdii.js?v=terminal-3';
-import { assess, validValuation, RULES } from './analysis.js?v=terminal-3';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-3';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-4';
+import { createQDII } from './qdii.js?v=terminal-4';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-4';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-4';
 const $ = s => document.querySelector(s);
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
 const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
@@ -144,9 +144,9 @@ function rulesContent() {
   return `<p class="inline-note">面向长期、小额分批研究，按下列顺序匹配第一项。判断只使用已收盘日线，不预测底部、次日涨跌或收益；估值单独展示，不混入未经验证的综合分数。</p><ol class="rules-list">${RULES.map(([name, text]) => `<li><strong>${name}</strong><span>${text}</span></li>`).join('')}</ol><p class="inline-note">至少252个有效交易日才判断；日线超过14个自然日暂停判断。200日均线为简单平均，RSI14采用Wilder平滑。所有价格指标基于当地价格指数，不含分红或人民币汇率；QDII还受汇率、费用和跟踪误差影响。规则未经收益优化回测，“回撤观察”并非确定买点。</p>`;
 }
 
-async function get(url, encoding) {
+async function get(url, encoding, timeoutMs = 12000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const r = await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

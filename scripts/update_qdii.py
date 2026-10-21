@@ -158,7 +158,7 @@ def nav_series(text, code, now):
         except ValueError:
             perf[period]=None
     last = points[-1]
-    return dict(nav=last['nav'],navDate=last['date'],changePct=last['changePct'],history=points,performance=perf,
+    return dict(nav=last['nav'],navDate=last['date'],changePct=last['changePct'],history=[dict(date=p['date'],nav=p['nav']) for p in points],performance=perf,
         fetchedAt=now.isoformat(timespec='seconds'),source='天天基金已公布净值',url=f'https://fund.eastmoney.com/pingzhongdata/{code}.js')
 
 
@@ -233,6 +233,8 @@ def main():
             if not future.done():future.cancel()
         executor.shutdown(wait=False,cancel_futures=True)
     for fund in funds.values():
+        if fund.get('navData'):
+            fund['navData']['history']=[dict(date=p['date'],nav=p['nav']) for p in fund['navData']['history']]
         fund['quotaHistory']=history_update(fund.get('quotaHistory'),fund.get('quota'))
     result=dict(schemaVersion=1,generatedAt=now.isoformat(timespec='seconds'),catalogCheckedAt=catalog_at,
         catalogSource=CATALOG_URL,channel='天天基金公开渠道',funds=funds,excluded=excluded,issues=issues)

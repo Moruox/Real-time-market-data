@@ -1,5 +1,5 @@
-import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-3';
-import {chnDate,cnTime} from './quotes.js?v=terminal-3';
+import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-4';
+import {chnDate,cnTime} from './quotes.js?v=terminal-4';
 export function quotaState(fund,now=Date.now()) {
   const q=fund?.quota;
   if(!q)return {key:'unknown',label:'尚未核实',available:false,limit:'—',note:'缺少渠道数据'};
@@ -65,9 +65,9 @@ export function createQDII({get,showDialog}) {
   }
   async function refresh(force=false){
     if(state.busy || (!force&&state.data&&Date.now()-state.lastFetch<300000))return true;
-    state.busy=true;$('#quota-reload').disabled=true;$('#quota-reload').textContent='读取中…';
+    state.busy=true;if(!state.data)$('#quota-body').innerHTML='<tr><td colspan="8" class="empty">正在读取基金限额和净值曲线…</td></tr>';$('#quota-reload').disabled=true;$('#quota-reload').textContent='读取中…';
     try{
-      const data=await get(`./data/qdii.json?t=${Date.now()}`);
+      const data=await get(`./data/qdii.json?t=${Date.now()}`, undefined, 35000);
       if(data.schemaVersion!==1 || !data.funds || !Object.keys(data.funds).length)throw new Error('Invalid QDII data');
       if(!state.data || data.generatedAt>=state.data.generatedAt)state.data=data;
       state.lastFetch=Date.now();render();return true;
