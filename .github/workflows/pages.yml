@@ -29,12 +29,14 @@ jobs:
           node --test tests/*.test.mjs
       - name: Update public quote snapshot
         run: python scripts/update_data.py
+      - name: Update OTC QDII quotas and NAV
+        run: python scripts/update_qdii.py
       - uses: actions/configure-pages@v5
       - name: Prepare static website
         run: |
           mkdir -p _site/data
-          cp index.html styles.css app.js quotes.js analysis.js favicon.svg config.json .nojekyll _site/
-          cp data/quotes.json _site/data/
+          cp index.html styles.css app.js quotes.js analysis.js ui.js qdii.js favicon.svg config.json .nojekyll _site/
+          cp data/quotes.json data/qdii.json _site/data/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

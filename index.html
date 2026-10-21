@@ -3,32 +3,32 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0c111b">
-  <meta name="description" content="一个清晰、轻量的全球行情看板。关注A股港股、亚洲市场、美股期货、国债、黄金、指数估值与分批买入参考；每条行情保留独立报价时间。">
-  <title>市场脉搏 · 全球行情看板</title>
+  <meta name="description" content="全球市场行情、指数估值与买点参考，以及纳斯达克100、标普500场外QDII指数基金申购限额和净值走势。">
+  <title>市场脉搏 · 全球市场终端</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=terminal-3">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('market-theme')||'dark'}catch{}</script>
-  <script src="app.js" type="module"></script>
+  <script src="app.js?v=terminal-3" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">跳转到行情</a>
 <header class="header"><div class="header-inner">
   <a class="brand" href="#" aria-label="市场脉搏首页"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><path d="M6 18h5l3-8 4 14 3-9h5" fill="none" stroke="var(--brand-icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>市场脉搏<small>MARKET PULSE</small></span></a>
-  <nav class="nav" aria-label="主导航"><a class="active" href="#main" id="nav-quotes">市场行情</a><a href="#main" id="nav-analysis">指数估值</a></nav>
+  <nav class="nav" aria-label="主导航"><div role="tablist" aria-label="市场页面"><button role="tab" class="active" id="nav-market" data-page="market" aria-selected="true" aria-controls="market-page">市场全览</button><button role="tab" id="nav-qdii" data-page="qdii" aria-selected="false" aria-controls="qdii-page">场外QDII指数基金限额 <span class="nav-new">QDII</span></button></div></nav>
   <div class="header-end"><span class="time-zone">北京时间 <b id="clock">--:--:--</b></span><button class="icon-button" id="theme" aria-label="切换亮色主题" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><a class="icon-button repo-link" href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer" aria-label="打开GitHub仓库" title="GitHub 仓库"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4a3.5 3.5 0 0 0-1-2.5c3-.4 6-1.5 6-6A4.7 4.7 0 0 0 18.7 6a4.4 4.4 0 0 0-.1-3s-1.2-.4-3.6 1a12.3 12.3 0 0 0-6 0C6.6 2.6 5.4 3 5.4 3a4.4 4.4 0 0 0-.1 3A4.7 4.7 0 0 0 4 9.5c0 4.5 3 5.6 6 6A3.5 3.5 0 0 0 9 18v4"/></svg></a></div>
 </div></header>
 <div class="shell">
-  <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow"><span class="dot"></span> YOUR DAILY MARKET BRIEF</p><h1 id="page-title">全球行情，<wbr><span class="title-ending">一眼看清<span>。</span></span></h1><p class="subtitle">从亚洲开盘到美股收盘，把行情、估值和买入节奏放在一起。</p></div><div class="intro-actions"><span class="date" id="today"></span><button id="refresh" class="refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>刷新行情</span></button></div></section>
+  <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow"><span class="dot"></span> GLOBAL MARKET INTELLIGENCE <span class="terminal-id">/ MARKET PULSE</span></p><h1 id="page-title">全球市场<span>终端</span></h1><p class="subtitle" id="page-subtitle">行情 · 估值 · 买入参考，在一张表里看清。</p></div><div class="intro-actions"><span class="date" id="today"></span><button id="refresh" class="refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg><span>刷新数据</span></button></div></section>
   <div class="status-line"><span id="status" role="status" aria-live="polite"><span class="dot dim"></span> 正在载入最新报价…</span><label class="auto-label"><input type="checkbox" id="auto" checked><span>自动刷新</span><span id="countdown">30s</span></label></div>
   <div id="alert" class="alert" role="status" hidden></div>
+  <div id="market-page" role="tabpanel" aria-labelledby="nav-market">
   <section class="highlights" id="highlights" aria-label="重点行情"><div class="highlight skeleton"></div><div class="highlight skeleton"></div><div class="highlight skeleton"></div><div class="highlight skeleton"></div></section>
   <main id="main" tabindex="-1" class="main-grid">
     <section class="panel markets" aria-labelledby="market-title">
       <div class="panel-heading"><div><span class="section-kicker">MARKETS</span><h2 id="market-title">市场全览</h2></div><label class="search-box"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="搜索名称 / 代码" aria-label="搜索行情名称或代码"></label></div>
       <div class="tabs" id="tabs" role="group" aria-label="行情分类"><button class="selected" data-group="all" aria-pressed="true">全部市场</button><button data-group="watch" aria-pressed="false">我的关注 <span id="watch-count"></span></button></div>
-      <div class="analysis-toolbar"><div class="view-switch" role="group" aria-label="切换行情或指数分析"><button class="selected" data-view="quotes" aria-pressed="true">行情</button><button data-view="analysis" aria-pressed="false">估值与买点</button></div><button class="rules-button" id="rules-open">判断规则 <span aria-hidden="true">↗</span></button></div>
-      <div class="analysis-caption" id="analysis-caption" hidden><span id="analysis-count">指数分析载入中</span><span>收盘指标 · 点击查看分析</span></div>
-      <div class="table-wrap"><table class="quote-table"><thead><tr><th scope="col" class="star-th"><span class="sr-only">关注</span></th><th scope="col">名称 / 代码</th><th scope="col" class="num" id="price-heading">最新价</th><th scope="col" class="num"><span id="signal-heading" hidden>买点参考</span><button id="sort" aria-label="按涨跌幅排序">涨跌幅 <span id="sort-indicator">↕</span></button></th><th scope="col" class="quote-time" id="time-heading">报价时间 <span>北京时间</span></th></tr></thead><tbody id="market-body"><tr><td colspan="5" class="empty">正在连接行情源…</td></tr></tbody></table></div>
+      <div class="analysis-toolbar"><div class="analysis-caption"><span class="terminal-dot"></span><span id="analysis-count">指数分析载入中</span><span class="caption-divider">/</span><span>收盘指标</span></div><button class="rules-button" id="rules-open">判断规则 <span aria-hidden="true">↗</span></button></div>
+      <div class="table-wrap"><table class="quote-table merged-table"><caption class="sr-only">各市场行情、近60日走势、估值、回撤和买点参考</caption><thead><tr><th scope="col" class="star-th"><span class="sr-only">关注</span></th><th scope="col">指数 / 资产</th><th scope="col" class="num">最新价</th><th scope="col" class="num"><button id="sort" aria-label="按涨跌幅排序">涨跌幅 <span id="sort-indicator">↕</span></button></th><th scope="col" class="trend-heading">近60日走势</th><th scope="col" class="num">估值 PE1 / PB</th><th scope="col" class="num">高点回撤<small>近252交易日收盘</small></th><th scope="col">买点参考</th><th scope="col" class="quote-time">报价时间 / 详情<small>北京时间</small></th></tr></thead><tbody id="market-body"><tr><td colspan="9" class="empty">正在连接行情源…</td></tr></tbody></table></div>
       <div class="table-footer"><span id="table-count">— 个行情</span><span>涨 <i class="legend up"></i> 跌 <i class="legend down"></i> · 点击 ☆ 加入关注</span></div>
     </section>
     <aside class="sidebar" aria-label="市场摘要">
@@ -37,8 +37,23 @@
       <section class="session-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><h3>看报价时间，也看市场时段</h3><p>休市时保留最后报价；美股现货和期货分别显示，不把昨夜收盘当作今天行情。</p></div></section>
     </aside>
   </main>
+  </div>
+  <section id="qdii-page" role="tabpanel" aria-labelledby="nav-qdii" hidden>
+    <div class="quota-overview" id="quota-overview"><div class="panel quota-metric skeleton"></div><div class="panel quota-metric skeleton"></div><div class="panel quota-metric skeleton"></div><div class="panel quota-metric skeleton"></div></div>
+    <details class="benchmark-fold" id="benchmark-fold" open><summary>标的指数走势 <span>NASDAQ 100 / S&amp;P 500</span></summary><div class="benchmark-grid" id="qdii-benchmarks"></div></details>
+    <section class="panel quota-panel" aria-labelledby="quota-title">
+      <div class="panel-heading"><div><span class="section-kicker">OTC QDII / SUBSCRIPTION MONITOR</span><h2 id="quota-title" tabindex="-1">场外QDII指数基金限额</h2></div><label class="search-box"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="quota-search" type="search" placeholder="基金名称 / 代码 / 机构" aria-label="搜索QDII基金名称或代码"></label></div>
+      <div class="quota-index-tabs tabs" id="quota-index-tabs" role="group" aria-label="跟踪指数"><button class="selected" data-index="all" aria-pressed="true">全部份额</button><button data-index="ndx" aria-pressed="false">纳斯达克100</button><button data-index="sp500" aria-pressed="false">标普500</button><button data-index="sp500ew" aria-pressed="false">标普500等权 <span class="variant-tag">变体</span></button></div>
+      <div class="quota-filters"><label>份额类别<select id="quota-class" aria-label="筛选基金份额类别"><option value="all">全部类别</option><option value="A">A类</option><option value="C">C类</option><option value="other">其他类别</option></select></label><label>币种<select id="quota-currency" aria-label="筛选基金币种"><option value="all">全部币种</option><option value="CNY">人民币</option><option value="USD">美元</option></select></label><label>排序<select id="quota-sort" aria-label="QDII基金排序"><option value="available">可申购优先</option><option value="limit">已披露限额从高到低</option><option value="code">基金代码</option></select></label><label class="only-open"><input id="quota-only-open" type="checkbox">仅看可申购</label></div>
+      <div class="quota-channel"><span class="channel-label">天天基金公开渠道</span><span id="quota-stamp">等待限额快照</span><button id="quota-reload" class="text-button">重新读取快照 ↻</button></div>
+      <p class="quota-note">限额为查询时渠道页面的普通申购信息；支付宝、银行和直销可能不同。同一基金不同份额可能合并限额，请勿把各行金额直接相加。</p>
+      <div class="table-wrap"><table class="quota-table"><caption class="sr-only">场外QDII基金渠道申购状态、日限额、申购起点及净值走势</caption><thead><tr><th scope="col">基金 / 代码 / 份额</th><th scope="col">渠道状态</th><th scope="col" class="num">日累计申购限额</th><th scope="col" class="num">申购起点</th><th scope="col" class="num">单位净值</th><th scope="col" class="num">净值日涨跌</th><th scope="col">近90个净值日</th><th scope="col">详情</th></tr></thead><tbody id="quota-body"><tr><td colspan="8" class="empty">切换到此页后读取基金限额与走势…</td></tr></tbody></table></div>
+      <div class="table-footer"><span id="quota-count">— 个份额</span><div class="pagination"><button id="quota-prev" aria-label="上一页基金">←</button><span id="quota-page-number">1 / 1</span><button id="quota-next" aria-label="下一页基金">→</button></div></div>
+      <p class="quota-bottom-note" id="quota-coverage"></p>
+    </section>
+  </section>
   <p class="snapshot-stamp" id="snapshot-info"></p>
-  <footer><span class="footer-brand">市场脉搏 <span>/</span> MARKET PULSE</span><span>独立报价 · 清晰来源 · 轻量浏览</span><a href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></footer>
+  <footer><span class="footer-brand">市场脉搏 <span>/</span> MARKET PULSE</span><span>GLOBAL MARKETS / INDEX VALUATION / QDII</span><a href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></footer>
 </div>
 <dialog id="analysis-dialog" class="analysis-dialog" aria-labelledby="dialog-title"><div class="dialog-heading"><div><span class="section-kicker" id="dialog-kicker">INDEX ANALYSIS</span><h2 id="dialog-title">指数分析</h2></div><button class="icon-button" id="dialog-close" aria-label="关闭分析">×</button></div><div id="dialog-content"></div></dialog>
 <noscript><p class="noscript">请启用 JavaScript 以加载并刷新行情；可点击各市场名称查看源站行情。</p></noscript>

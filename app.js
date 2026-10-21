@@ -1,12 +1,10 @@
-import { assess, validValuation, RULES } from './analysis.js';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-3';
+import { createQDII } from './qdii.js?v=terminal-3';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-3';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-3';
 const $ = s => document.querySelector(s);
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const signed = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}%`;
-const tone = v => v > 0 ? 'up' : v < 0 ? 'down' : 'neutral';
-const price = (v, digits = 2) => Number(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
-const state = { config: null, quotes: {}, analysis: {}, view: 'quotes', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null };
+const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
 let watch;
 try { const raw = localStorage.getItem('market-watch'); watch = raw ? new Set(JSON.parse(raw)) : new Set(['nq', 'kospi', 'tl', 'xau']); } catch { watch = new Set(['nq', 'kospi', 'tl', 'xau']); }
 let auto = true;
@@ -34,20 +32,21 @@ function renderHighlights() {
   $('#highlights').innerHTML = highlight('nq', '纳斯达克100期货', 'NQ') + highlight('kospi', '韩国KOSPI', 'KS11') + highlight('tl', '30年期国债', 'TL') + highlight('xau', '现货黄金', 'XAU/USD');
 }
 function row(item) {
-  const q = state.quotes[item.id];
-  const star = `<td class="star-cell"><button class="star" data-watch="${item.id}" aria-label="${watch.has(item.id) ? '取消关注' : '关注'}${item.name}" aria-pressed="${watch.has(item.id)}">${watch.has(item.id) ? '★' : '☆'}</button></td>`;
-  const name = `<td class="name-cell"><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.name}</a><span class="symbol">${item.symbol}</span></td>`;
-  if (state.view === 'analysis') return analysisRow(item, star, name);
-  if (!q) return `<tr class="market-row">${star}${name}<td class="num price">—</td><td class="num"><span class="muted">—</span></td><td class="quote-time"><span class="source warning">暂无有效报价</span></td></tr>`;
-  const label = quoteLabel(item, q);
-  const stamp = `${chnDate(q.quoteAt).slice(5)} ${cnTime(q.quoteAt)}`;
-  return `<tr class="market-row">${star}${name}<td class="num price" title="单位：${item.unit}">${price(q.price, item.digits)}</td><td class="num" title="${esc(q.basis)}">${moneyClass(q.changePct)}</td><td class="quote-time" title="${esc(q.source)} · ${esc(q.basis)} · 查询于${cnTime(q.fetchedAt)}"><time class="time-primary" datetime="${esc(q.quoteAt)}">${stamp}</time><span class="source ${label.warning ? 'warning' : ''}">${esc(label.text)}</span></td></tr>`;
+  const q=state.quotes[item.id],a=state.analysis[item.id] || {},t=a.technical,v=a.valuation,pb=a.factsheet;
+  const star=`<td class="star-cell"><button class="star" data-watch="${item.id}" aria-label="${watch.has(item.id)?'取消关注':'关注'}${item.name}" aria-pressed="${watch.has(item.id)}">${watch.has(item.id)?'★':'☆'}</button></td>`;
+  const name=`<td class="name-cell"><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.name}</a><span class="symbol">${item.symbol}</span></td>`;
+  const label=q?quoteLabel(item,q):null;
+  const valuation=validValuation(v)?`<span class="pe-value">${price(v.pe)}<small> / ${pb?.pb>0?price(pb.pb):'—'}</small></span><span class="metric-sub">PE ${esc(v.date.slice(5))}${pb?.pb>0?` · PB ${esc(pb.date.slice(5))}`:''}</span>`:`<span class="muted">—</span><span class="metric-sub">${item.analyze?'估值暂缺':'不适用'}</span>`;
+  const signal=item.analyze?`<button class="signal-button" data-analyze="${item.id}" aria-label="查看${item.name}的估值与买点分析">${signalHTML(t)}</button>`:'<span class="muted">—</span>';
+  const time=q?`<time class="time-primary" datetime="${esc(q.quoteAt)}">${chnDate(q.quoteAt).slice(5)} ${cnTime(q.quoteAt)}</time><span class="source ${label.warning?'warning':''}">${esc(label.text)}</span>`:'<span class="source warning">暂无有效报价</span>';
+  return `<tr class="market-row">${star}${name}<td class="num price-cell" data-label="最新价"><strong class="price">${q?price(q.price,item.digits):'—'}</strong></td><td class="num change-cell" data-label="涨跌幅" title="${esc(q?.basis)}">${q?moneyClass(q.changePct):'—'}</td><td class="trend-cell" data-label="近60日走势">${t?sparkline(t.history,'close',item.name+'近60日收盘走势'): '<span class="muted">—</span>'}</td><td class="num valuation-cell" data-label="PE1 / PB">${valuation}</td><td class="num drawdown-cell" data-label="高点回撤" title="近252交易日收盘高点回撤，不是估值分位">${t?`<strong>${signed(t.drawdownPct)}</strong><span class="metric-sub">收盘 ${esc(t.asOf.slice(5))}</span>`:'<span class="muted">—</span>'}</td><td class="signal-cell" data-label="买点参考">${signal}</td><td class="quote-time">${time}${item.analyze?`<button class="detail-link" data-analyze="${item.id}">分析详情 ↗</button>`:''}</td></tr>`;
 }
+
 function renderMarkets() {
   const { instruments, groups } = state.config;
-  let filtered = instruments.filter(i => (state.view !== 'analysis' || i.analyze) && (state.active === 'all' || (state.active === 'watch' ? watch.has(i.id) : i.group === state.active)) && `${i.name} ${i.symbol} ${i.id}`.toLowerCase().includes(state.search));
+  let filtered = instruments.filter(i => (state.active === 'all' || (state.active === 'watch' ? watch.has(i.id) : i.group === state.active)) && `${i.name} ${i.symbol} ${i.id}`.toLowerCase().includes(state.search));
   let html = '';
-  if (state.sort && state.view === 'quotes') {
+  if (state.sort) {
     filtered = [...filtered].sort((a, b) => {
       const av = state.quotes[a.id]?.changePct, bv = state.quotes[b.id]?.changePct;
       if (av == null) return 1; if (bv == null) return -1; return state.sort * (av - bv);
@@ -58,11 +57,11 @@ function renderMarkets() {
       const items = filtered.filter(i => i.group === group.id);
       if (!items.length) continue;
       const note = group.id === 'us' ? '现货正常时段 · 不是期货' : group.id === 'bonds' ? '源站涨跌口径通常为较昨结算' : group.id === 'futures' ? '当月连续 · 不代表今晚收盘' : '';
-      html += `<tr class="group-heading"><th colspan="5" scope="colgroup">${group.label}<small>${note}</small></th></tr>` + items.map(row).join('');
+      html += `<tr class="group-heading"><th colspan="9" scope="colgroup">${group.label}<small>${note}</small></th></tr>` + items.map(row).join('');
     }
   }
-  $('#market-body').innerHTML = html || '<tr><td colspan="5" class="empty">没有匹配的行情。试试其他名称，或点击 ☆ 添加关注。</td></tr>';
-  $('#table-count').textContent = `${filtered.length} 个${state.view === 'analysis' ? '指数' : '行情'}`;
+  $('#market-body').innerHTML = html || '<tr><td colspan="9" class="empty">没有匹配的行情。试试其他名称，或点击 ☆ 添加关注。</td></tr>';
+  $('#table-count').textContent = `${filtered.length} 项行情`;
   const analyzable = instruments.filter(i => i.analyze);
   const covered = analyzable.filter(i => validValuation(state.analysis[i.id]?.valuation));
   $('#analysis-count').textContent = `${analyzable.length}个指数 · ${covered.length}个有官方PE`;
@@ -90,31 +89,21 @@ function signalHTML(t) {
   const s = assess(t);
   return `<span class="signal signal-${s.key}">${s.label}</span>`;
 }
-function analysisRow(item, star, name) {
-  const a = state.analysis[item.id] || {}, v = a.valuation, t = a.technical;
-  const valuation = validValuation(v) ? `<strong class="pe-value">${price(v.pe)}<small>×</small></strong><span class="metric-sub">PE1 · ${esc(v.date.slice(5))}${ageMinutes(v.date + 'T23:59:59+08:00') > 10 * 1440 ? ' 较旧' : ''}</span>` : '<span class="muted">—</span><span class="metric-sub">估值暂缺</span>';
-  return `<tr class="market-row">${star}${name}<td class="num valuation-cell">${valuation}</td><td class="num">${signalHTML(t)}<span class="metric-sub">${t ? `收盘 ${esc(t.asOf.slice(5))}` : '等待日线'}</span></td><td class="analysis-action"><button data-analyze="${item.id}" aria-label="查看${item.name}的估值与买点分析">查看分析 <span aria-hidden="true">↗</span></button></td></tr>`;
+const qdii=createQDII({get,showDialog});
+function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); qdii.setMarkets(state.quotes,state.analysis); }
+function setPage(page, updateHash=false) {
+  state.page=page==='qdii'?'qdii':'market';
+  const isQDII=state.page==='qdii';
+  $('#market-page').hidden=isQDII;$('#qdii-page').hidden=!isQDII;
+  $('#alert').hidden=isQDII||!state.quoteWarning;
+  $('.skip').setAttribute('href',isQDII?'#quota-title':'#main');
+  for(const b of document.querySelectorAll('[data-page]')){const active=b.dataset.page===state.page;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;}
+  $('#page-title').innerHTML=isQDII?'场外QDII<span>限额雷达</span>':'全球市场<span>终端</span>';
+  $('#page-subtitle').textContent=isQDII?'纳斯达克100与标普500，逐份额查看渠道限额和净值走势。':'行情 · 估值 · 买入参考，在一张表里看清。';
+  if(updateHash && location.hash!==(isQDII?'#qdii':'#market'))history.pushState(null,'',isQDII?'#qdii':'#market');
+  if(isQDII)qdii.refresh();
 }
-function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); }
-function setView(view) {
-  state.view = view;
-  if (view === 'analysis' && ['bonds', 'futures', 'gold'].includes(state.active)) {
-    state.active = 'all';
-    for (const b of $('#tabs').querySelectorAll('button')) { const selected = b.dataset.group === 'all'; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', String(selected)); }
-  }
-  for (const b of document.querySelectorAll('[data-view]')) {
-    b.classList.toggle('selected', b.dataset.view === view);
-    b.setAttribute('aria-pressed', String(b.dataset.view === view));
-  }
-  const analysis = view === 'analysis';
-  $('#nav-analysis').classList.toggle('active', analysis); $('#nav-quotes').classList.toggle('active', !analysis);
-  $('#analysis-caption').hidden = !analysis;
-  $('#price-heading').textContent = analysis ? '估值 PE1' : '最新价';
-  $('#signal-heading').hidden = !analysis; $('#sort').hidden = analysis;
-  $('#time-heading').innerHTML = analysis ? '详情' : '报价时间 <span>北京时间</span>';
-  $('.quote-table').classList.toggle('analysis-table', analysis);
-  renderMarkets();
-}
+
 function seriesChart(t, name) {
   const rows = t?.history;
   if (!Array.isArray(rows) || rows.length < 2) return '';
@@ -182,7 +171,7 @@ async function snapshot() {
   render();
   return true;
 }
-async function refresh() {
+async function refresh(forceQDII=false) {
   if (state.busy || !state.config) return;
   state.busy = true; $('#refresh').disabled = true; $('#refresh').classList.add('busy');
   $('#refresh span').textContent = '正在刷新';
@@ -191,6 +180,7 @@ async function refresh() {
   const emItems = items.filter(i => i.eastmoney);
   const emURL = 'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f12,f13,f14,f124&secids=';
   const tasks = [snapshot()];
+  if(state.page==='qdii')tasks.push(qdii.refresh(forceQDII===true));
   let direct = 0;
   tasks.push(get(`https://qt.gtimg.cn/q=${tc}&_=${Date.now()}`, 'gb18030').then(text => {
     const parsed = parseTencent(text, items); if (!Object.keys(parsed).length) throw new Error('Empty Tencent data');
@@ -212,8 +202,10 @@ async function refresh() {
   if (!received) { alert.textContent = '暂时无法连接行情源。请稍后重试，或点击数据源链接查看。'; alert.hidden = false; }
   else if (failed) { alert.textContent = `部分数据源暂时不可用，已保留最后有效报价。每行时间代表实际报价时间，不是本次查询时间。`; alert.hidden = false; }
   else { alert.hidden = true; }
+  state.quoteWarning=alert.hidden?'':alert.textContent;
+  if(state.page==='qdii')alert.hidden=true;
   render();
-  state.busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('busy'); $('#refresh span').textContent = '刷新行情';
+  state.busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('busy'); $('#refresh span').textContent = '刷新数据';
 }
 function tick() {
   const now = new Date(); $('#clock').textContent = cnTime(now);
@@ -225,7 +217,7 @@ function tick() {
   }
   $('#countdown').textContent = $('#auto').checked ? `${Math.max(0, state.countdown)}s` : '暂停';
 }
-$('#refresh').addEventListener('click', refresh);
+$('#refresh').addEventListener('click', () => refresh(true));
 $('#auto').addEventListener('change', e => { try { localStorage.setItem('market-auto', String(e.target.checked)); } catch {} state.countdown = state.config?.refreshSeconds || 30; tick(); });
 $('#theme').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('market-theme', theme); } catch {} updateThemeLabel(); });
 function updateThemeLabel() { $('#theme').setAttribute('aria-label', `切换${document.documentElement.dataset.theme === 'dark' ? '亮色' : '深色'}主题`); }
@@ -242,9 +234,9 @@ $('#market-body').addEventListener('click', e => {
   $('#status').setAttribute('aria-label', `${b.getAttribute('aria-label')}成功`);
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#auto').checked && state.config && state.lastRefresh && Date.now() - state.lastRefresh > 30000) refresh(); });
-$('.view-switch').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
-$('#nav-quotes').addEventListener('click', () => { if (state.config) setView('quotes'); });
-$('#nav-analysis').addEventListener('click', () => { if (state.config) setView('analysis'); });
+$('.nav [role="tablist"]').addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)setPage(b.dataset.page,true);});
+$('.nav [role="tablist"]').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const page=e.key==='Home'?'market':e.key==='End'?'qdii':state.page==='market'?'qdii':'market';setPage(page,true);document.querySelector(`[data-page="${page}"]`).focus();});
+window.addEventListener('popstate',()=>setPage(['#qdii','#quota-title'].includes(location.hash)?'qdii':'market'));
 $('#rules-open').addEventListener('click', () => showDialog('买点参考如何判断', 'TRANSPARENT RULES', rulesContent()));
 $('#dialog-close').addEventListener('click', () => $('#analysis-dialog').close());
 $('#analysis-dialog').addEventListener('click', e => { if (e.target === e.currentTarget) { const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.currentTarget.close(); } });
@@ -254,8 +246,8 @@ try {
   if (!Array.isArray(state.config.instruments) || !state.config.instruments.length) throw new Error('Invalid config');
   const validIds = new Set(state.config.instruments.map(i => i.id)); watch = new Set([...watch].filter(id => validIds.has(id)));
   $('#tabs').insertAdjacentHTML('beforeend', state.config.groups.map(g => `<button data-group="${esc(g.id)}" aria-pressed="false">${esc(g.label)}</button>`).join(''));
-  render(); await refresh();
+  render(); setPage(['#qdii','#quota-title'].includes(location.hash)?'qdii':'market'); await refresh();
 } catch {
   $('#alert').hidden = false; $('#alert').textContent = '页面配置载入失败。请检查网络后刷新页面。';
-  $('#status').textContent = '未连接'; $('#highlights').innerHTML = ''; $('#market-body').innerHTML = '<tr><td colspan="5" class="empty">暂时无法载入行情</td></tr>';
+  $('#status').textContent = '未连接'; $('#highlights').innerHTML = ''; $('#market-body').innerHTML = '<tr><td colspan="9" class="empty">暂时无法载入行情</td></tr>';
 }
