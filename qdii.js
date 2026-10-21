@@ -1,6 +1,6 @@
-import {assess,validValuation} from './analysis.js?v=terminal-8';
-import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-8';
-import {chnDate,cnTime} from './quotes.js?v=terminal-8';
+import {assess,validValuation} from './analysis.js?v=terminal-9';
+import {esc,price,signed,tone,sparkline,historyPlot,bindHistoryPlot} from './ui.js?v=terminal-9';
+import {chnDate,cnTime} from './quotes.js?v=terminal-9';
 export function quotaState(fund,now=Date.now()) {
   const q=fund?.quota;
   if(!q)return {key:'unknown',label:'尚未核实',available:false,limit:'—',note:'缺少渠道数据'};

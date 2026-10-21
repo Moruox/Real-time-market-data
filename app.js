@@ -1,7 +1,8 @@
-import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-8';
-import { createQDII } from './qdii.js?v=terminal-8';
-import { assess, validValuation, RULES } from './analysis.js?v=terminal-8';
-import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-8';
+import { esc, price, signed, tone, sparkline } from './ui.js?v=terminal-9';
+import { createFX } from './fx.js?v=terminal-9';
+import { createQDII } from './qdii.js?v=terminal-9';
+import { assess, validValuation, RULES } from './analysis.js?v=terminal-9';
+import { CN, chnDate, cnTime, parseTencent, parseEastmoney, mergeQuotes } from './quotes.js?v=terminal-9';
 const $ = s => document.querySelector(s);
 const moneyClass = (v, arrow = true) => `<span class="pct ${tone(v)}">${arrow ? `<span aria-hidden="true">${v > 0 ? '↗' : v < 0 ? '↘' : '—'}</span>` : ''}${signed(v)}</span>`;
 const state = { config: null, quotes: {}, analysis: {}, page: 'market', snapshotAt: null, active: 'all', sort: 0, search: '', busy: false, countdown: 30, lastRefresh: null, quoteWarning: '' };
@@ -89,19 +90,21 @@ function signalHTML(t) {
   const s = assess(t);
   return `<span class="signal signal-${s.key}">${s.label}</span>`;
 }
+const fx=createFX({get});
 const qdii=createQDII({get,showDialog,showAnalysis});
-function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); qdii.setMarkets(state.quotes,state.analysis); }
+function render() { if (!state.config) return; renderHighlights(); renderMarkets(); renderSidebar(); qdii.setMarkets(state.quotes,state.analysis); fx.setMarkets(state.quotes); }
+function pageFromHash(){return ['#fx','#fx-title'].includes(location.hash)?'fx':['#qdii','#quota-title'].includes(location.hash)?'qdii':'market';}
 function setPage(page, updateHash=false) {
-  state.page=page==='qdii'?'qdii':'market';
-  const isQDII=state.page==='qdii';
-  $('#market-page').hidden=isQDII;$('#qdii-page').hidden=!isQDII;
-  $('#alert').hidden=isQDII||!state.quoteWarning;
-  $('.skip').setAttribute('href',isQDII?'#quota-title':'#main');
+  state.page=['qdii','fx'].includes(page)?page:'market';
+  for(const name of ['market','qdii','fx'])$('#'+name+'-page').hidden=state.page!==name;
+  $('#alert').hidden=state.page!=='market'||!state.quoteWarning;
+  $('.status-line').hidden=state.page==='fx';$('#snapshot-info').hidden=state.page==='fx';
+  $('.skip').setAttribute('href',state.page==='fx'?'#fx-title':state.page==='qdii'?'#quota-title':'#main');
   for(const b of document.querySelectorAll('[data-page]')){const active=b.dataset.page===state.page;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;}
-  $('#page-title').innerHTML=isQDII?'场外QDII<span>限额雷达</span>':'全球市场<span>终端</span>';
-  $('#page-subtitle').textContent=isQDII?'按指数与投资方向筛选场外QDII，查看限额、走势、标的估值与买点参考。':'行情 · 估值 · 买入参考，在一张表里看清。';
-  if(updateHash && location.hash!==(isQDII?'#qdii':'#market'))history.pushState(null,'',isQDII?'#qdii':'#market');
-  if(isQDII)qdii.refresh();
+  const titles={market:['全球市场<span>终端</span>','行情 · 估值 · 买入参考，在一张表里看清。'],qdii:['场外QDII<span>限额雷达</span>','按指数与投资方向筛选场外QDII，查看限额、走势、标的估值与买点参考。'],fx:['汇率与<span>购买力</span>','换汇 · 海外资产 · 黄金成本，看清人民币升贬值的影响。']};
+  $('#page-title').innerHTML=titles[state.page][0];$('#page-subtitle').textContent=titles[state.page][1];
+  if(updateHash&&location.hash!=='#'+state.page)history.pushState(null,'','#'+state.page);
+  if(state.page==='qdii')qdii.refresh();if(state.page==='fx')fx.refresh();
 }
 
 function seriesChart(t, name, isETF=false) {
@@ -180,6 +183,7 @@ async function refresh(forceQDII=false) {
   const emURL = 'https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f2,f3,f12,f13,f14,f124&secids=';
   const tasks = [snapshot()];
   if(state.page==='qdii')tasks.push(qdii.refresh(forceQDII===true));
+  if(state.page==='fx')tasks.push(fx.refresh(forceQDII===true));
   let direct = 0;
   tasks.push(get(`https://qt.gtimg.cn/q=${tc}&_=${Date.now()}`, 'gb18030').then(text => {
     const parsed = parseTencent(text, items); if (!Object.keys(parsed).length) throw new Error('Empty Tencent data');
@@ -202,7 +206,7 @@ async function refresh(forceQDII=false) {
   else if (failed) { alert.textContent = `部分数据源暂时不可用，已保留最后有效报价。每行时间代表实际报价时间，不是本次查询时间。`; alert.hidden = false; }
   else { alert.hidden = true; }
   state.quoteWarning=alert.hidden?'':alert.textContent;
-  if(state.page==='qdii')alert.hidden=true;
+  if(state.page!=='market')alert.hidden=true;
   render();
   state.busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('busy'); $('#refresh span').textContent = '刷新数据';
 }
@@ -234,8 +238,8 @@ $('#market-body').addEventListener('click', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#auto').checked && state.config && state.lastRefresh && Date.now() - state.lastRefresh > 30000) refresh(); });
 $('.nav [role="tablist"]').addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)setPage(b.dataset.page,true);});
-$('.nav [role="tablist"]').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const page=e.key==='Home'?'market':e.key==='End'?'qdii':state.page==='market'?'qdii':'market';setPage(page,true);document.querySelector(`[data-page="${page}"]`).focus();});
-window.addEventListener('popstate',()=>setPage(['#qdii','#quota-title'].includes(location.hash)?'qdii':'market'));
+$('.nav [role="tablist"]').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const pages=['market','qdii','fx'],i=pages.indexOf(state.page);const page=e.key==='Home'?pages[0]:e.key==='End'?pages.at(-1):pages[(i+(e.key==='ArrowRight'?1:2))%3];setPage(page,true);document.querySelector(`[data-page="${page}"]`).focus();});
+window.addEventListener('popstate',()=>setPage(pageFromHash()));
 $('#rules-open').addEventListener('click', () => showDialog('买点参考如何判断', 'TRANSPARENT RULES', rulesContent()));
 $('#dialog-close').addEventListener('click', () => $('#analysis-dialog').close());
 $('#analysis-dialog').addEventListener('click', e => { if (e.target === e.currentTarget) { const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) e.currentTarget.close(); } });
@@ -245,7 +249,7 @@ try {
   if (!Array.isArray(state.config.instruments) || !state.config.instruments.length) throw new Error('Invalid config');
   const validIds = new Set(state.config.instruments.map(i => i.id)); watch = new Set([...watch].filter(id => validIds.has(id)));
   $('#tabs').insertAdjacentHTML('beforeend', state.config.groups.map(g => `<button data-group="${esc(g.id)}" aria-pressed="false">${esc(g.label)}</button>`).join(''));
-  render(); setPage(['#qdii','#quota-title'].includes(location.hash)?'qdii':'market'); await refresh();
+  render(); setPage(pageFromHash()); await refresh();
 } catch {
   $('#alert').hidden = false; $('#alert').textContent = '页面配置载入失败。请检查网络后刷新页面。';
   $('#status').textContent = '未连接'; $('#highlights').innerHTML = ''; $('#market-body').innerHTML = '<tr><td colspan="9" class="empty">暂时无法载入行情</td></tr>';

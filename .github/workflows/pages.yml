@@ -29,14 +29,16 @@ jobs:
           node --test tests/*.test.mjs
       - name: Update public quote snapshot
         run: python scripts/update_data.py
+      - name: Update ECB reference exchange rates
+        run: python scripts/update_fx.py
       - name: Update OTC QDII quotas and NAV
         run: python scripts/update_qdii.py
       - uses: actions/configure-pages@v5
       - name: Prepare static website
         run: |
           mkdir -p _site/data
-          cp index.html styles.css app.js quotes.js analysis.js ui.js qdii.js favicon.svg config.json .nojekyll _site/
-          cp data/quotes.json data/qdii.json data/qdii-history.json _site/data/
+          cp index.html styles.css app.js quotes.js analysis.js ui.js qdii.js fx.js favicon.svg config.json .nojekyll _site/
+          cp data/fx.json data/quotes.json data/qdii.json data/qdii-history.json _site/data/
           cp -r data/fund-history _site/data/
       - uses: actions/upload-pages-artifact@v3
         with:

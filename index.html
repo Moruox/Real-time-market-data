@@ -6,15 +6,15 @@
   <meta name="description" content="全球市场行情、指数估值与买点参考，以及场外QDII分类、申购限额、净值走势和标的分析。">
   <title>市场脉搏 · 全球市场终端</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=terminal-8">
+  <link rel="stylesheet" href="styles.css?v=terminal-9">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('market-theme')||'dark'}catch{}</script>
-  <script src="app.js?v=terminal-8" type="module"></script>
+  <script src="app.js?v=terminal-9" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">跳转到行情</a>
 <header class="header"><div class="header-inner">
   <a class="brand" href="#" aria-label="市场脉搏首页"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><path d="M6 18h5l3-8 4 14 3-9h5" fill="none" stroke="var(--brand-icon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>市场脉搏<small>MARKET PULSE</small></span></a>
-  <nav class="nav" aria-label="主导航"><div role="tablist" aria-label="市场页面"><button role="tab" class="active" id="nav-market" data-page="market" aria-selected="true" aria-controls="market-page">市场全览</button><button role="tab" id="nav-qdii" data-page="qdii" aria-selected="false" aria-controls="qdii-page">场外QDII基金限额 <span class="nav-new">QDII</span></button></div></nav>
+  <nav class="nav" aria-label="主导航"><div role="tablist" aria-label="市场页面"><button role="tab" class="active" id="nav-market" data-page="market" aria-selected="true" aria-controls="market-page">市场全览</button><button role="tab" id="nav-qdii" data-page="qdii" aria-selected="false" aria-controls="qdii-page">场外QDII基金限额 <span class="nav-new">QDII</span></button><button role="tab" id="nav-fx" data-page="fx" aria-selected="false" aria-controls="fx-page">汇率兑换</button></div></nav>
   <div class="header-end"><span class="time-zone">北京时间 <b id="clock">--:--:--</b></span><button class="icon-button" id="theme" aria-label="切换亮色主题" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><a class="icon-button repo-link" href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer" aria-label="打开GitHub仓库" title="GitHub 仓库"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 19c-4 1-4-2-6-2m12 5v-4a3.5 3.5 0 0 0-1-2.5c3-.4 6-1.5 6-6A4.7 4.7 0 0 0 18.7 6a4.4 4.4 0 0 0-.1-3s-1.2-.4-3.6 1a12.3 12.3 0 0 0-6 0C6.6 2.6 5.4 3 5.4 3a4.4 4.4 0 0 0-.1 3A4.7 4.7 0 0 0 4 9.5c0 4.5 3 5.6 6 6A3.5 3.5 0 0 0 9 18v4"/></svg></a></div>
 </div></header>
 <div class="shell">
@@ -52,6 +52,20 @@
       <div class="table-footer"><span id="quota-count">— 个份额</span><div class="pagination"><button id="quota-prev" aria-label="上一页基金">←</button><span id="quota-page-number">1 / 1</span><button id="quota-next" aria-label="下一页基金">→</button></div></div>
       <p class="quota-bottom-note" id="quota-coverage"></p>
     </section>
+  </section>
+  <section id="fx-page" role="tabpanel" aria-labelledby="nav-fx" hidden>
+    <div class="fx-toolbar"><div><span class="section-kicker">CURRENCY / PURCHASING POWER</span><h2 id="fx-title" tabindex="-1">人民币购买力雷达</h2><p id="fx-stamp" class="muted small">等待日参考汇率…</p></div><div class="fx-controls"><label>比较区间<select id="fx-period"><option value="1">前一数据日</option><option value="7">近一周</option><option value="30" selected>近一月</option><option value="90">近三月</option><option value="365">近一年</option></select></label><button class="refresh" id="fx-reload">更新参考价 ↻</button></div></div>
+    <div id="fx-warning" class="alert" role="status" hidden></div>
+    <div id="fx-overview" class="fx-overview"></div>
+    <div class="fx-two-column">
+      <section class="panel fx-card" id="fx-converter"><span class="section-kicker">CURRENCY CONVERTER</span><h2>同样的钱，现在能换多少</h2><div class="fx-fields"><label>选择货币<select id="fx-currency"><option value="USD">美元 USD</option></select></label><label>换算方向<select id="fx-direction"><option value="out">人民币 → 外币</option><option value="in">外币 → 人民币</option></select></label><label class="fx-full"><span id="fx-amount-label">输入人民币金额</span><input type="number" id="fx-amount" min="0" step="any" value="10000"></label></div><div id="fx-conversion-result" class="fx-conversion" aria-live="polite"></div><p class="inline-note">采用参考汇率，不含银行买卖价差、手续费。比较日遇休市向前取最近有效日，具体日期见结果。</p></section>
+      <section class="panel fx-card" id="fx-impact" aria-live="polite"><h2>升贬值对你有什么影响</h2></section>
+    </div>
+    <section class="panel fx-card fx-asset"><div><span class="section-kicker">UNHEDGED ASSET / SCENARIO</span><h2>海外资产：涨幅与汇率一起算</h2><p class="inline-note">使用上方所选币种与区间。适用于该币种的未对冲敞口；基金用人民币申购，不代表没有汇率风险。对冲份额需另看对冲比例与成本。</p></div><label>外币计价资产同期涨跌（%）<input id="fx-asset-return" type="number" min="-100" step="any" value="0"></label><div id="fx-asset-result" aria-live="polite"></div></section>
+    <section class="panel fx-card"><span class="section-kicker">CNY BUYING POWER</span><h2 id="fx-chart-title">人民币购买力走势</h2><p class="inline-note">曲线上升 = 1元人民币可换更多外币。至少展示近一个月；表格迷你曲线展示近60个数据日。</p><div id="fx-chart"></div></section>
+    <section class="panel fx-card fx-gold"><span class="section-kicker">GOLD / ISOLATE THE FX EFFECT</span><h2>同一美元金价，人民币买1克贵了还是便宜了</h2><p class="inline-note">固定同一个美元金价，只替换汇率，观察人民币购买黄金的成本变化。</p><div class="fx-fields"><label>美元金价（美元 / 金衡盎司）<input id="fx-gold-usd" type="number" min="0.01" step="any" readonly></label><label>人民币购买预算（元）<input id="fx-gold-budget" type="number" min="0" step="any" value="10000"></label></div><label class="fx-check"><input id="fx-gold-live" type="checkbox" checked>使用市场全览的最新可用现货黄金报价（取消后可自定义）</label><p id="fx-gold-source" class="inline-note"></p><div id="fx-gold-results" aria-live="polite"></div><p class="fx-formula">人民币元 / 克 = 美元 / 金衡盎司 × 人民币 / 美元 ÷ 31.1034768</p><p class="inline-note">比较期一栏是假设沿用旧汇率的理论成本，<strong>不是当时的实际金价</strong>。黄金报价与日参考汇率的时点不同；结果不含国内金价溢价、税费、金饰工费或银行点差，也不是黄金ETF的份额净值。人民币升值的降价作用，仍可能被美元金价上涨抵消。</p></section>
+    <section class="panel"><div class="panel-heading"><div><span class="section-kicker">GLOBAL FX MATRIX</span><h2>主要货币全览</h2></div><label class="search-box"><input id="fx-search" type="search" placeholder="货币名称 / 代码" aria-label="搜索货币"></label></div><div class="table-wrap"><table class="fx-table"><caption class="sr-only">人民币兑各币种参考汇率、升贬值与外币资产折算影响</caption><thead><tr><th>货币</th><th class="num">1人民币可换</th><th class="num">1外币折人民币</th><th>人民币升贬值</th><th>外币持仓折算影响</th><th>人民币购买力走势</th><th>参考日期</th></tr></thead><tbody id="fx-table-body"><tr><td colspan="7" class="empty">正在读取汇率…</td></tr></tbody></table></div><div class="table-footer" id="fx-count"></div></section>
+    <p class="fx-source">来源：<a href="https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html" target="_blank" rel="noopener noreferrer">欧洲央行日参考汇率 ↗</a>。以同日欧元交叉报价折算人民币，通常欧洲工作日每日更新一次，不是盘中实时价。仅覆盖源站当前提供的币种；数据缺失不补造。升贬值按“1元人民币可兑换的外币数量”计算，外币资产折算影响按相反报价计算，两者百分比不简单互为负数。</p>
   </section>
   <p class="snapshot-stamp" id="snapshot-info"></p>
   <footer><span class="footer-brand">市场脉搏 <span>/</span> MARKET PULSE</span><span>GLOBAL MARKETS / INDEX VALUATION / QDII</span><a href="https://github.com/Moruox/Real-time-market-data" target="_blank" rel="noopener noreferrer">查看源码 ↗</a></footer>
